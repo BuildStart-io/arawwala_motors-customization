@@ -21,6 +21,7 @@ import {
   HandMetal,
   Trash2,
   Crosshair,
+  Mic,
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
@@ -627,7 +628,14 @@ export default function Conversations() {
                                 : "bg-muted rounded-bl-md"
                             )}
                           >
-                            <p className="whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.message) }} />
+                            {msg.message_type === "audio" || msg.message_type === "ptt" ? (
+                              <div className="flex items-center gap-1.5 opacity-80">
+                                <Mic className="h-4 w-4" />
+                                <span className="italic">Voice message</span>
+                              </div>
+                            ) : (
+                              <p className="whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.message) }} />
+                            )}
                             <p
                               className={cn(
                                 "text-[10px] mt-1",
