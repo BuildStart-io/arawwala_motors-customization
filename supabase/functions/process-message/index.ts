@@ -153,38 +153,61 @@ async function processMessage(
 
   let isVoice = false;
   if (messageType === "ptt" || messageType === "audio") {
-    console.log(`[${corrId}] Detected voice message, attempting transcription...`);
-    const transcription = await transcribeAudio(sessionApiKey, wahaMessageId);
-    if (transcription) {
-      messageText = transcription;
-      isVoice = true;
-      messageType = "text"; 
-    } else {
-      console.log(`[${corrId}] Transcription failed, skipping voice message`);
-      return; 
-    }
+    isVoice = true;
   }
 
   // Check if this is a media message — if so, store it but do NOT reply
   const mediaTypes = ["image", "video", "document", "sticker", "vcard", "location"];
-  const isMediaMessage = mediaTypes.includes(messageType) || 
-    (!messageText && messageType !== "text") ||
+  let isMediaMessage = mediaTypes.includes(messageType) || 
+    (!messageText && messageType !== "text" && !isVoice) ||
     (body?.data?.messages?.messageBody === undefined && body?.data?.messages?.message?.conversation === undefined && !isVoice && !messageText);
 
   // 1. Store the incoming message in conversations
   mark("store_inbound_start");
-  const { error: insertError } = await supabase.from("conversations").insert({
+  const { data: inboundMsg, error: insertError } = await supabase.from("conversations").insert({
     phone_number: phoneNumber,
-    message: messageText,
+    message: isVoice ? "🎤 [Voice Note: Transcribing...]" : messageText,
     direction: "inbound",
     message_type: messageType,
-    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: isVoice, transcription_provider: isVoice ? "gemini" : undefined },
+    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: isVoice },
     user_id: userId,
-  });
+  }).select('id').single();
   mark("store_inbound_end");
 
   if (insertError) {
     console.error(`[${corrId}] Error storing message:`, insertError);
+  }
+
+  if (isVoice) {
+    console.log(`[${corrId}] Detected voice message, attempting transcription...`);
+    const transcription = await transcribeAudio(sessionApiKey, wahaMessageId);
+    if (transcription) {
+      messageText = transcription;
+      if (inboundMsg?.id) {
+        await supabase.from("conversations").update({
+          message: transcription,
+          metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: true, transcription_provider: "gemini" }
+        }).eq('id', inboundMsg.id);
+      }
+    } else {
+      console.log(`[${corrId}] Transcription failed, skipping voice message and sending apology`);
+      if (inboundMsg?.id) {
+        await supabase.from("conversations").update({
+          message: "🎤 [Voice Note: Transcription failed]"
+        }).eq('id', inboundMsg.id);
+      }
+      
+      const apologyText = "I couldn't hear that clearly. Could you please resend it or type it out for me?";
+      await supabase.from("conversations").insert({
+        phone_number: phoneNumber,
+        message: apologyText,
+        direction: "outbound",
+        message_type: "text",
+        user_id: userId,
+      });
+      await sendWhatsApp(supabaseUrl, supabaseServiceKey, phoneNumber, apologyText, null, sessionApiKey);
+      return; 
+    }
   }
 
   // 1b. Contact billing: register this contact for the current cycle.
