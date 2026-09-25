@@ -120,8 +120,10 @@ serve(async (req) => {
       || wp._data?.message?.extendedTextMessage?.text
       || "";
 
-    // Message type — derive from WAHA `_data.message.*` keys; fall back to "text"
-    let messageType = "text";
+    // Message type — derive from WAHA `type` or `_data.message.*` keys
+    let messageType = wp.type || "text";
+    if (messageType === "chat") messageType = "text";
+    
     const wMsg = wp._data?.message || {};
     if (wMsg.imageMessage) messageType = "image";
     else if (wMsg.videoMessage) messageType = "video";
@@ -129,7 +131,7 @@ serve(async (req) => {
     else if (wMsg.documentMessage) messageType = "document";
     else if (wMsg.stickerMessage) messageType = "sticker";
     else if (wMsg.locationMessage) messageType = "location";
-    else if (wp.hasMedia && !messageText) messageType = "image";
+    else if (wp.hasMedia && !messageText && messageType === "text") messageType = "image";
 
     const senderName = wp._data?.pushName || wp._data?.notifyName || wp.notifyName || "Unknown";
     const wahaMessageId = wp.id || wp._data?.key?.id || `${phoneNumber}-${Date.now()}`;
