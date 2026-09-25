@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { transcribeAudio } from "./transcribe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -148,13 +149,27 @@ async function processMessage(
   timings: Record<string, number>,
   mark: (label: string) => void
 ) {
-  const { user_id: userId, phone_number: phoneNumber, sender_name: senderName, message_text: messageText, message_type: messageType, session_api_key: sessionApiKey, raw_payload: body } = msg;
+  let { user_id: userId, phone_number: phoneNumber, sender_name: senderName, message_text: messageText, message_type: messageType, session_api_key: sessionApiKey, raw_payload: body, wsender_message_id: wahaMessageId } = msg;
+
+  let isVoice = false;
+  if (messageType === "ptt" || messageType === "audio") {
+    console.log(`[${corrId}] Detected voice message, attempting transcription...`);
+    const transcription = await transcribeAudio(sessionApiKey, wahaMessageId);
+    if (transcription) {
+      messageText = transcription;
+      isVoice = true;
+      messageType = "text"; 
+    } else {
+      console.log(`[${corrId}] Transcription failed, skipping voice message`);
+      return; 
+    }
+  }
 
   // Check if this is a media message — if so, store it but do NOT reply
-  const mediaTypes = ["image", "video", "audio", "document", "sticker", "ptt", "vcard", "location"];
+  const mediaTypes = ["image", "video", "document", "sticker", "vcard", "location"];
   const isMediaMessage = mediaTypes.includes(messageType) || 
     (!messageText && messageType !== "text") ||
-    (body?.data?.messages?.messageBody === undefined && body?.data?.messages?.message?.conversation === undefined && !messageText);
+    (body?.data?.messages?.messageBody === undefined && body?.data?.messages?.message?.conversation === undefined && !isVoice && !messageText);
 
   // 1. Store the incoming message in conversations
   mark("store_inbound_start");
@@ -163,7 +178,7 @@ async function processMessage(
     message: messageText,
     direction: "inbound",
     message_type: messageType,
-    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId },
+    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: isVoice, transcription_provider: isVoice ? "gemini" : undefined },
     user_id: userId,
   });
   mark("store_inbound_end");
