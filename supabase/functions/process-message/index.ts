@@ -180,7 +180,8 @@ async function processMessage(
 
   if (isVoice) {
     console.log(`[${corrId}] Detected voice message, attempting transcription...`);
-    const transcription = await transcribeAudio(sessionApiKey, wahaMessageId);
+    const mediaUrl = body?.payload?.media?.url || body?.media?.url;
+    const transcription = await transcribeAudio(sessionApiKey, wahaMessageId, mediaUrl);
     if (transcription) {
       messageText = transcription;
       if (inboundMsg?.id) {

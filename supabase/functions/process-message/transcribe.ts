@@ -6,7 +6,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function transcribeAudio(sessionName: string, wahaMessageId: string): Promise<string | null> {
+export async function transcribeAudio(sessionName: string, wahaMessageId: string, mediaUrl?: string): Promise<string | null> {
   const WAHA_BASE = (Deno.env.get("WAHA_BASE_URL") || "").replace(/\/+$/, "");
   const WAHA_KEY = Deno.env.get("WAHA_API_KEY") || "";
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
@@ -19,7 +19,7 @@ export async function transcribeAudio(sessionName: string, wahaMessageId: string
   // 1. Download WAHA Audio
   let audioBuffer: Uint8Array;
   try {
-    const wahaUrl = `${WAHA_BASE}/api/${encodeURIComponent(sessionName)}/messages/${encodeURIComponent(wahaMessageId)}/download`;
+    const wahaUrl = mediaUrl || `${WAHA_BASE}/api/${encodeURIComponent(sessionName)}/messages/${encodeURIComponent(wahaMessageId)}/download`;
     console.log(`Downloading audio from: ${wahaUrl}`);
     const res = await fetch(wahaUrl, {
       headers: { "X-Api-Key": WAHA_KEY, "Accept": "*/*" },
