@@ -384,6 +384,13 @@ async function processMessage(
   // Send text message last
   await sendWhatsApp(supabaseUrl, supabaseServiceKey, phoneNumber, replyMessage, null, sessionApiKey);
 
+  // Trigger Escalation Notification if AI requested it
+  if (aiData.shouldEscalate && aiData.escalationNotifyNumber) {
+    console.log(`[${corrId}] Triggering escalation to ${aiData.escalationNotifyNumber}`);
+    const escalationMsg = `⚠️ *AI Handover Alert*\nThe AI could not assist customer +${phoneNumber}. Please check the conversation on the dashboard and reply manually.`;
+    await sendWhatsApp(supabaseUrl, supabaseServiceKey, aiData.escalationNotifyNumber, escalationMsg, null, sessionApiKey);
+  }
+
   // Send order follow-up message if present
   if (followupMessage) {
     console.log(`[${corrId}] Sending order follow-up message`);

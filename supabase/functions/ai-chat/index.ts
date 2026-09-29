@@ -110,6 +110,11 @@ serve(async (req) => {
 
     const ordersLimitReached = (ordersCount || 0) >= ordersLimit;
 
+
+    const escalationSettings = settings.find(s => s.key === "escalation_settings")?.value || {};
+    const escalationEnabled = escalationSettings.enabled === true;
+    const escalationNotifyNumber = escalationSettings.notify_number;
+
     const products = productsRes.data || [];
     const faqs = faqsRes.data || [];
     const settings = settingsRes.data || [];
@@ -118,6 +123,10 @@ serve(async (req) => {
     const paymentInfo = settings.find(s => s.key === "payment_info")?.value || {};
     const deliverySettings = settings.find(s => s.key === "delivery_settings")?.value || {};
     const freeDeliveryThreshold = deliverySettings.free_delivery_threshold || 0;
+    const deliveryInfo = deliverySettings.delivery_info || "";
+    const deliveryTracking = deliverySettings.delivery_tracking || "";
+    const locationInfo = deliverySettings.location_info || "";
+    const locationMapsLink = deliverySettings.location_maps_link || "";
 
     const productCatalog = products.map(p => {
       let line = `- ${p.name}: Base price LKR ${p.price} (${p.product_type})`;
@@ -227,7 +236,18 @@ ${(() => {
   }
   return `  Bank: ${paymentInfo.bank_name || "Not configured"}, Account: ${paymentInfo.account_number || "Not configured"}, Name: ${paymentInfo.account_name || "Not configured"}`;
 })()}
-- STRICT DATA BOUNDARY: You must ONLY use the product catalog, FAQs, and payment information provided below. Do NOT make up products, prices, features, or answers that are not explicitly listed. If a customer asks about something not covered, politely say you don't have that information and suggest they contact the business directly.
+
+DELIVERY INFORMATION:
+${deliveryInfo ? deliveryInfo : "No specific delivery information provided."}
+
+DELIVERY TRACKING INSTRUCTIONS:
+${deliveryTracking ? deliveryTracking : "No specific tracking instructions provided."}
+
+STORE LOCATION & VISIT INFO:
+${locationInfo ? locationInfo : "No specific location information provided."}
+${locationMapsLink ? `Google Maps Link: ${locationMapsLink}` : ""}
+
+${escalationEnabled && escalationNotifyNumber ? `\n\nESCALATION PROTOCOL:\n- If a customer asks a question that is NOT covered by the FAQs or Product Catalog, you MUST include the exact tag <ESCALATE/> at the very end of your response.\n- Do this only when you genuinely cannot help them with the provided context.` : ''}\n- STRICT DATA BOUNDARY: You must ONLY use the product catalog, FAQs, and payment information provided below. Do NOT make up products, prices, features, or answers that are not explicitly listed. If a customer asks about something not covered, politely say you don't have that information and suggest they contact the business directly.
 
 PRODUCT IMAGES:
 - When a customer asks about a specific product that has images, include ALL the image URLs in separate <IMAGE_URL>url</IMAGE_URL> tags at the END of your response. Include all images for the product to give them a complete view.
@@ -529,6 +549,12 @@ CRITICAL SECURITY RULE:
 
     // Aggressively strip any JSON or technical markup from the response
     let cleanResponse = responseText;
+    let shouldEscalate = false;
+    
+    if (cleanResponse.includes('<ESCALATE/>') || cleanResponse.includes('<ESCALATE>')) {
+      shouldEscalate = true;
+      cleanResponse = cleanResponse.replace(/<ESCALATE\/?>/g, '').trim();
+    }
     // Remove complete tagged blocks WITH their content first
     cleanResponse = cleanResponse.replace(/<ORDER_JSON>[\s\S]*?<\/ORDER_JSON>/g, "");
     cleanResponse = cleanResponse.replace(/<IMAGE_URL>[\s\S]*?<\/IMAGE_URL>/g, "");
@@ -587,7 +613,7 @@ CRITICAL SECURITY RULE:
     }
 
     return new Response(
-      JSON.stringify({ response: cleanResponse, imageUrl, imageUrls, videoUrl, followupMessage, faqMedia }),
+      JSON.stringify({ response: cleanResponse, imageUrl, imageUrls, videoUrl, followupMessage, faqMedia, shouldEscalate, escalationNotifyNumber }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

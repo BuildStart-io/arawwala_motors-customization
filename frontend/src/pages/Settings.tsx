@@ -77,6 +77,10 @@ export default function Settings() {
 
   // Delivery Settings
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number>(0);
+  const [deliveryInfo, setDeliveryInfo] = useState("");
+  const [deliveryTracking, setDeliveryTracking] = useState("");
+  const [locationInfo, setLocationInfo] = useState("");
+  const [locationMapsLink, setLocationMapsLink] = useState("");
 
   // Order Notifications
   const [notificationPhone, setNotificationPhone] = useState("");
@@ -84,6 +88,10 @@ export default function Settings() {
   // Order Follow-up Message
   const [orderFollowupMessage, setOrderFollowupMessage] = useState("");
   const [orderFollowupEnabled, setOrderFollowupEnabled] = useState(false);
+
+  // Escalation Settings
+  const [escalationEnabled, setEscalationEnabled] = useState(false);
+  const [escalationNotifyNumber, setEscalationNotifyNumber] = useState("");
 
   // Inactivity Follow-up (Growth plan only)
   const [inactivityFollowupEnabled, setInactivityFollowupEnabled] = useState(false);
@@ -173,6 +181,10 @@ export default function Settings() {
             break;
           case "delivery_settings":
             setFreeDeliveryThreshold((setting.value as any)?.free_delivery_threshold || 0);
+            setDeliveryInfo((setting.value as any)?.delivery_info || "");
+            setDeliveryTracking((setting.value as any)?.delivery_tracking || "");
+            setLocationInfo((setting.value as any)?.location_info || "");
+            setLocationMapsLink((setting.value as any)?.location_maps_link || "");
             break;
           case "order_followup_message": {
             const fVal = setting.value as any;
@@ -180,7 +192,11 @@ export default function Settings() {
             setOrderFollowupEnabled(fVal?.enabled ?? false);
             break;
           }
-          case "inactivity_followup": {
+          case "escalation_settings":
+          setEscalationEnabled((setting.value as any)?.enabled || false);
+          setEscalationNotifyNumber((setting.value as any)?.notify_number || "");
+          break;
+        case "inactivity_followup": {
             const iVal = setting.value as any;
             setInactivityFollowupMessage(iVal?.text || "");
             setInactivityFollowupEnabled(iVal?.enabled ?? false);
@@ -553,7 +569,13 @@ export default function Settings() {
   };
 
   const handleSaveDelivery = () => {
-    saveSettings("delivery_settings", { free_delivery_threshold: freeDeliveryThreshold });
+    saveSettings("delivery_settings", { 
+      free_delivery_threshold: freeDeliveryThreshold, 
+      delivery_info: deliveryInfo,
+      delivery_tracking: deliveryTracking,
+      location_info: locationInfo,
+      location_maps_link: locationMapsLink
+    });
   };
 
   const handleSaveNotifications = () => {
@@ -562,6 +584,18 @@ export default function Settings() {
 
   const handleSaveOrderFollowup = () => {
     saveSettings("order_followup_message", { text: orderFollowupMessage, enabled: orderFollowupEnabled });
+  };
+
+  const handleSaveEscalation = () => {
+    if (escalationEnabled && !escalationNotifyNumber) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a phone number for escalation notifications.",
+        variant: "destructive"
+      });
+      return;
+    }
+    saveSettings("escalation_settings", { enabled: escalationEnabled, notify_number: escalationNotifyNumber });
   };
 
   const handleSaveInactivityFollowup = () => {
@@ -624,7 +658,7 @@ export default function Settings() {
             <TabsTrigger value="whatsapp" className="flex-1 sm:flex-initial">WhatsApp</TabsTrigger>
             <TabsTrigger value="chatbot" className="flex-1 sm:flex-initial">Chatbot</TabsTrigger>
             <TabsTrigger value="payment" className="flex-1 sm:flex-initial">Payment</TabsTrigger>
-            <TabsTrigger value="delivery" className="flex-1 sm:flex-initial">Delivery</TabsTrigger>
+            <TabsTrigger value="delivery" className="flex-1 sm:flex-initial">Location & Delivery</TabsTrigger>
             <TabsTrigger value="staff" className="flex-1 sm:flex-initial">Staff</TabsTrigger>
           </TabsList>
 
@@ -1030,6 +1064,50 @@ export default function Settings() {
               </CardContent>
             </Card>
 
+            {/* Escalation Notification */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" />
+                      AI Handover / Escalation
+                    </CardTitle>
+                    <CardDescription>
+                      Notify the business owner if the AI cannot answer a customer's question
+                    </CardDescription>
+                  </div>
+                  <Switch
+                    checked={escalationEnabled}
+                    onCheckedChange={setEscalationEnabled}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="escalation-number">Owner's WhatsApp Number</Label>
+                  <Input
+                    id="escalation-number"
+                    value={escalationNotifyNumber}
+                    onChange={(e) => setEscalationNotifyNumber(e.target.value)}
+                    placeholder="e.g. 94771234567"
+                    disabled={!escalationEnabled}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the phone number (with country code, no +) that should receive a notification when the AI fails to answer a customer.
+                  </p>
+                </div>
+                <Button onClick={handleSaveEscalation} disabled={saving}>
+                  {saving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save Escalation Settings
+                </Button>
+              </CardContent>
+            </Card>
+
             {/* Inactivity Follow-up Message (Growth only) */}
             <Card>
               <CardHeader>
@@ -1308,6 +1386,49 @@ export default function Settings() {
                       ? `Orders of LKR ${freeDeliveryThreshold.toLocaleString()} or more will have free delivery.`
                       : "Free delivery threshold is disabled. Delivery fees will always apply."}
                   </p>
+                </div>
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="space-y-2">
+                    <Label>Delivery Information</Label>
+                    <Textarea
+                      value={deliveryInfo}
+                      onChange={(e) => setDeliveryInfo(e.target.value)}
+                      placeholder="Enter general information about delivery times, locations, and methods..."
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Delivery Tracking Instructions</Label>
+                    <Textarea
+                      value={deliveryTracking}
+                      onChange={(e) => setDeliveryTracking(e.target.value)}
+                      placeholder="Enter instructions on how customers can track their orders (e.g. tracking URLs)..."
+                      rows={4}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2 pt-4 border-t">
+                    <Label>Store Location Information</Label>
+                    <Textarea
+                      value={locationInfo}
+                      onChange={(e) => setLocationInfo(e.target.value)}
+                      placeholder="Enter the physical address and details about visiting the store..."
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Google Maps Link</Label>
+                    <Input
+                      value={locationMapsLink}
+                      onChange={(e) => setLocationMapsLink(e.target.value)}
+                      placeholder="https://maps.google.com/..."
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      This information will be used by the AI to answer location and delivery related questions.
+                    </p>
+                  </div>
                 </div>
                 <Button onClick={handleSaveDelivery} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}

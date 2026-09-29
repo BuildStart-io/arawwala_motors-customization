@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRole } from "@/hooks/useRole";
 import { useStaffAccess } from "@/hooks/useStaffAccess";
 import { Button } from "@/components/ui/button";
+import ThemeToggle from "@/components/ThemeToggle";
 import { 
   LayoutDashboard, 
   Package, 
@@ -100,9 +101,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <img src={buildstartLogo} alt="BuildStart" className="h-6 w-6" />
             <span className="font-semibold text-sm">{isAdminRoute ? "Super Admin" : "BuildStart"}</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle variant="button" className="h-8 w-8" />
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -162,6 +166,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </nav>
 
               <div className="p-4 border-t space-y-2">
+                <ThemeToggle variant="sidebar" />
                 <Button 
                   variant="ghost" 
                   className="w-full justify-start text-muted-foreground hover:text-foreground"

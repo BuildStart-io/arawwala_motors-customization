@@ -4,3 +4,5 @@ dist/
 .DS_Store
 *.log
 .gemini/
+docker/volumes/db/data
+db/03_cron_filled.sql
