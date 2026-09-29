@@ -111,13 +111,13 @@ serve(async (req) => {
     const ordersLimitReached = (ordersCount || 0) >= ordersLimit;
 
 
+    const settings = settingsRes.data || [];
     const escalationSettings = settings.find(s => s.key === "escalation_settings")?.value || {};
     const escalationEnabled = escalationSettings.enabled === true;
     const escalationNotifyNumber = escalationSettings.notify_number;
 
     const products = productsRes.data || [];
     const faqs = faqsRes.data || [];
-    const settings = settingsRes.data || [];
 
     const welcomeMessage = settings.find(s => s.key === "welcome_message")?.value?.text || "Welcome! How can I help you?";
     const paymentInfo = settings.find(s => s.key === "payment_info")?.value || {};
