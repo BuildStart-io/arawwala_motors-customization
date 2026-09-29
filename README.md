@@ -1,110 +1,25 @@
-# BuildStart.io — self-hosted WhatsApp AI bot
+# Arawwala Motors - Customization
 
+This repository contains the tailored self-hosted WhatsApp AI bot environment for **Arawwala Motors**. It builds upon the core `BuildStart-io` self-hosted architecture with several bespoke features specifically requested by the client.
 
-Everything in this bundle runs on **your** infrastructure. The only thing left on
-Lovable is a single stateless function, `ai-generate`, which forwards prompts to
-the Lovable AI Gateway and returns text. It touches no database and stores nothing.
+## High-Level Customizations
 
-```
-┌──────────── your server ─────────────────────────────┐
-│  frontend (Vite dashboard)                           │
-│        │ supabase-js                                 │
-│  self-hosted Supabase                                │
-│    postgres + auth + kong + edge-runtime             │
-│      ├ webhook-wsender ─► message_queue              │
-│      ├ process-message  (queue drainer, cron)        │
-│      ├ ai-chat  ── builds prompt, quotas, orders ────┼──► Lovable ai-generate ──► AI Gateway
-│      ├ send-whatsapp ──► WAHA / Wsender              │
-│      ├ media-storage ──► MinIO                       │
-│      └ send-push ──────► Firebase                    │
-└──────────────────────────────────────────────────────┘
-```
+### 1. Dark Theme & UI Modifications
+- Implemented a persistent **Dark/Light Theme Toggle**.
+- The toggle was seamlessly integrated into both the mobile header and desktop sidebar navigation of the dashboard (`DashboardLayout.tsx`).
 
-`ai-chat` stays local on purpose: catalog, FAQs, plan quotas, order extraction and
-`ai_usage_logs` never leave your database. The prompt, model
-(`google/gemini-3-flash-preview`) and `max_tokens` (500) are byte-identical to the
-Lovable-hosted version, so reply quality is unchanged.
+### 2. AI Handover / Escalation Protocol
+- Added an **Escalation Notification System** to the Chatbot settings tab.
+- **How it works:** If a customer asks a question that the AI cannot answer using the provided Product Catalog or FAQs, the AI is instructed to output an `<ESCALATE/>` tag. The `process-message` edge function intercepts this tag and automatically sends a WhatsApp alert to the designated business owner's phone number, prompting them to take over the chat manually.
 
-## Layout
+### 3. Expanded Location & Delivery Logic
+- Renamed the "Delivery" settings tab to **"Location & Delivery"**.
+- Split a single text box into highly specific, AI-readable fields:
+  - **Delivery Information** (timing, cutoffs, e.g., 16-hour island-wide delivery)
+  - **Delivery Tracking Instructions**
+  - **Store Location Information**
+  - **Google Maps Link**
+- **AI Integration:** The `ai-chat` Edge Function was updated to dynamically pull all of these separate fields and inject them perfectly into the AI's system prompt, enabling the bot to flawlessly answer tracking inquiries and direct walk-in customers to the physical store.
 
-```
-db/01_schema.sql        full public schema: tables, enums, RLS, GRANTs, functions, triggers
-db/02_seed.sql          plan limits + first-admin template (no tenant data — clean start)
-db/03_cron.sql          pg_cron jobs (queue drainer, follow-ups)
-supabase/functions/     all 12 edge functions (ai-generate is NOT here — it lives on Lovable)
-frontend/               the full dashboard, including super-admin and billing pages
-.env.example            every variable, split by process
-```
-
-## Boot order
-
-1. **Start Supabase self-hosted** (the official `docker/docker-compose.yml` from
-   `supabase/supabase`). Keep `db`, `auth`, `rest`, `kong`, `storage`, `studio`,
-   `functions` (edge-runtime).
-2. **Schema**
-   ```bash
-   psql "$DB_URL" -f db/01_schema.sql
-   psql "$DB_URL" -f db/02_seed.sql
-   ```
-3. **Auth**: disable public sign-ups (`GOTRUE_DISABLE_SIGNUP=true`) — this product is
-   login-only. Create your first user in Studio, then run the commented block at the
-   bottom of `02_seed.sql` to give it a profile + `super_admin` role.
-4. **Edge functions**: mount `supabase/functions` into the edge-runtime container and
-   give it the function env vars from `.env.example`. All functions verify JWTs in
-   code, so run the runtime with `--no-verify-jwt`.
-5. **Cron**: fill in the placeholders in `db/03_cron.sql` and run it.
-6. **WAHA**: point its webhook at
-   `http://<your-host>:8000/functions/v1/webhook-wsender`.
-7. **MinIO**: one public bucket per business, named `biz-<user_id>`; `media-storage`
-   creates them on demand.
-8. **Frontend**
-   ```bash
-   cd frontend && cp ../.env.example .env   # keep only the VITE_ lines
-   npm install && npm run dev
-   ```
-9. **Regenerate DB types** after any schema change:
-   ```bash
-   npx supabase gen types typescript --db-url "$DB_URL" > frontend/src/integrations/supabase/types.ts
-   ```
-
-## The Lovable side
-
-One function, `ai-generate`:
-
-```
-POST https://<lovable-ref>.supabase.co/functions/v1/ai-generate
-x-bot-key: <bot key>
-{ "systemPrompt": "...", "messages": [{"role":"user","content":"hi"}],
-  "model": "google/gemini-3-flash-preview", "maxTokens": 500 }
-
-200 { "text": "...", "model": "...", "usage": { "promptTokens": 812, ... } }
-```
-
-Errors: `401` bad bot key, `400` bad request, `429` rate limited (retry with
-backoff), `402` credits exhausted, `502` upstream failure.
-
-## Running many bots against the same gateway
-
-This is the point of the split, and it works without changes:
-
-- Each bot is its own self-hosted stack (own Postgres, own WAHA session, own MinIO
-  bucket) with its own `BOT_API_KEY`.
-- `ai-generate` is stateless, so N bots hitting it concurrently is just N HTTP
-  requests; nothing is shared, nothing collides.
-- Add a bot: append a new key to the gateway's `BOT_API_KEYS` (comma-separated),
-  set `BOT_API_KEY` on the new bot, done. No redeploy of the Lovable function needed
-  beyond the secret update.
-- Revoke a bot: remove its key from `BOT_API_KEYS`; it starts getting `401`.
-- Quotas stay **local** to each bot (`ai_usage_logs`, `contact_usage`, plan tiers).
-  The gateway deliberately enforces no per-key ceiling, so all bots draw from the
-  same Lovable credit pool. Watch total credits, and if one tenant must be capped,
-  cap it in that bot's `platform_settings.plan_limits`.
-- Only shared cost centre is AI credits. Everything else scales per bot.
-
-## Security notes
-
-- `LOVABLE_API_KEY` never leaves Lovable. Bots only ever hold a bot key.
-- Bot keys are bearer credentials: keep them in the edge-runtime env, never in
-  frontend code.
-- All tables are RLS-protected and scoped by `user_id`; roles live in `user_roles`
-  and are checked with the `has_role()` security-definer function.
+## Setup Instructions
+Please refer to `GUIDE.md` for standard environment setup and container booting instructions.
