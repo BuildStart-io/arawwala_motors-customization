@@ -46,7 +46,17 @@ export default function Customers() {
   }, [load]);
 
   const filteredCustomers = rows.filter((r) => {
+    // Only include customers who have provided a product name or vehicle model
+    const hasProduct = r.product_name && r.product_name.trim() !== "";
+    const hasVehicle = r.vehicle_model && r.vehicle_model.trim() !== "";
+    
+    if (!hasProduct && !hasVehicle) {
+      return false;
+    }
+
     const q = search.toLowerCase();
+    if (!q) return true;
+
     return (
       (r.customer_name && r.customer_name.toLowerCase().includes(q)) ||
       (r.phone_number && r.phone_number.toLowerCase().includes(q)) ||
