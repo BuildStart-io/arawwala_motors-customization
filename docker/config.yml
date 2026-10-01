@@ -1,0 +1,516 @@
+name: supabase
+services:
+  api-gw:
+    container_name: supabase-envoy
+    depends_on:
+      studio:
+        condition: service_healthy
+        required: true
+    entrypoint:
+      - /bin/sh
+      - /docker-entrypoint.sh
+    environment:
+      ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+      ANON_KEY_ASYMMETRIC: ""
+      DASHBOARD_PASSWORD: this_password_is_insecure_and_should_be_updated
+      DASHBOARD_USERNAME: supabase
+      SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      SERVICE_ROLE_KEY_ASYMMETRIC: ""
+      SUPABASE_PUBLISHABLE_KEY: ""
+      SUPABASE_SECRET_KEY: ""
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'
+      timeout: 5s
+      interval: 10s
+      retries: 3
+    image: envoyproxy/envoy:v1.39.0
+    networks:
+      default:
+        aliases:
+          - envoy
+          - kong
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8000"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/api/envoy/envoy.yaml
+        target: /etc/envoy/envoy.yaml
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/api/envoy/cds.yaml
+        target: /etc/envoy/cds.yaml
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/api/envoy/lds.template.yaml
+        target: /etc/envoy/lds.template.yaml
+        read_only: true
+        bind: {}
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/api/envoy/docker-entrypoint.sh
+        target: /docker-entrypoint.sh
+        read_only: true
+        bind: {}
+  auth:
+    container_name: supabase-auth
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+    environment:
+      API_EXTERNAL_URL: http://localhost:8000/auth/v1
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:a28dc3fe3bb8205d024605a51bf6e705@db:5432/postgres
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "true"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ISSUER: http://localhost:8000/auth/v1
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_SMS_AUTOCONFIRM: "true"
+      GOTRUE_SMTP_ADMIN_EMAIL: admin@example.com
+      GOTRUE_SMTP_HOST: supabase-mail
+      GOTRUE_SMTP_PASS: fake_mail_password
+      GOTRUE_SMTP_PORT: "2500"
+      GOTRUE_SMTP_SENDER_NAME: fake_sender
+      GOTRUE_SMTP_USER: fake_mail_user
+      GOTRUE_URI_ALLOW_LIST: ""
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - http://localhost:9999/health
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    image: supabase/gotrue:v2.189.0
+    networks:
+      default: null
+    restart: unless-stopped
+  db:
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+    container_name: supabase-db
+    environment:
+      JWT_EXP: "3600"
+      JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGDATABASE: postgres
+      PGPASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      PGPORT: "5432"
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: /var/run/postgresql
+      POSTGRES_PASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      POSTGRES_PORT: "5432"
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - postgres
+        - -h
+        - localhost
+      timeout: 5s
+      interval: 5s
+      retries: 10
+    image: supabase/postgres:17.6.1.136
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/realtime.sql
+        target: /docker-entrypoint-initdb.d/migrations/99-realtime.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/webhooks.sql
+        target: /docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/roles.sql
+        target: /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/jwt.sql
+        target: /docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/data
+        target: /var/lib/postgresql/data
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/_supabase.sql
+        target: /docker-entrypoint-initdb.d/migrations/97-_supabase.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/logs.sql
+        target: /docker-entrypoint-initdb.d/migrations/99-logs.sql
+        bind:
+          selinux: Z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/db/pooler.sql
+        target: /docker-entrypoint-initdb.d/migrations/99-pooler.sql
+        bind:
+          selinux: Z
+      - type: volume
+        source: db-config
+        target: /etc/postgresql-custom
+        volume: {}
+  functions:
+    command:
+      - start
+      - --main-service
+      - /home/deno/functions/main
+    container_name: supabase-edge-functions
+    depends_on:
+      api-gw:
+        condition: service_healthy
+        required: true
+    environment:
+      JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+      SUPABASE_DB_URL: postgresql://postgres:a28dc3fe3bb8205d024605a51bf6e705@db:5432/postgres
+      SUPABASE_PUBLIC_URL: http://localhost:8000
+      SUPABASE_PUBLISHABLE_KEYS: '{"default":""}'
+      SUPABASE_SECRET_KEYS: '{"default":""}'
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      SUPABASE_URL: http://api-gw:8000
+      VERIFY_JWT: "false"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 1 bash -c '</dev/tcp/127.0.0.1/9000'
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    image: supabase/edge-runtime:v1.74.0
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/functions
+        target: /home/deno/functions
+        bind:
+          selinux: z
+      - type: volume
+        source: deno-cache
+        target: /root/.cache/deno
+        volume: {}
+  imgproxy:
+    container_name: supabase-imgproxy
+    environment:
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_BIND: :5001
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_MAX_SRC_RESOLUTION: "16.8"
+      IMGPROXY_USE_ETAG: "true"
+    healthcheck:
+      test:
+        - CMD
+        - imgproxy
+        - health
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    image: darthsim/imgproxy:v3.30.1
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/storage
+        target: /var/lib/storage
+        bind:
+          selinux: z
+  meta:
+    container_name: supabase-meta
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+    environment:
+      CRYPTO_KEY: your-encryption-key-32-chars-min
+      PG_META_DB_HOST: db
+      PG_META_DB_NAME: postgres
+      PG_META_DB_PASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_USER: postgres
+      PG_META_PORT: "8080"
+    image: supabase/postgres-meta:v0.96.6
+    networks:
+      default: null
+    restart: unless-stopped
+  realtime:
+    container_name: realtime-dev.supabase-realtime
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+    environment:
+      API_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      APP_NAME: realtime
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: supabaserealtime
+      DB_HOST: db
+      DB_NAME: postgres
+      DB_PASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+      DNS_NODES: ''''''
+      ERL_AFLAGS: -proto_dist inet_tcp
+      METRICS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PORT: "4000"
+      RLIMIT_NOFILE: "10000"
+      RUN_JANITOR: "true"
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      SEED_SELF_HOST: "true"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -sSfL --head -o /dev/null -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE" http://localhost:4000/api/tenants/realtime-dev/health'
+      timeout: 5s
+      interval: 30s
+      retries: 3
+      start_period: 10s
+    image: supabase/realtime:v2.102.3
+    networks:
+      default: null
+    restart: unless-stopped
+  rest:
+    command:
+      - postgrest
+    container_name: supabase-rest
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+    environment:
+      PGRST_ADMIN_SERVER_HOST: localhost
+      PGRST_ADMIN_SERVER_PORT: "3001"
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+      PGRST_APP_SETTINGS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_URI: postgres://authenticator:a28dc3fe3bb8205d024605a51bf6e705@db:5432/postgres
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+    healthcheck:
+      test:
+        - CMD
+        - postgrest
+        - --ready
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    image: postgrest/postgrest:v14.12
+    networks:
+      default: null
+    restart: unless-stopped
+  storage:
+    container_name: supabase-storage
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+      imgproxy:
+        condition: service_started
+        required: true
+      rest:
+        condition: service_started
+        required: true
+    environment:
+      ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+      AUTH_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      DATABASE_URL: postgres://supabase_storage_admin:a28dc3fe3bb8205d024605a51bf6e705@db:5432/postgres
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      FILE_SIZE_LIMIT: "52428800"
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      GLOBAL_S3_BUCKET: stub
+      IMGPROXY_URL: http://imgproxy:5001
+      POSTGREST_URL: http://rest:3000
+      REGION: stub
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      S3_PROTOCOL_ACCESS_KEY_ID: 625729a08b95bf1b7ff351a663f3a23c
+      S3_PROTOCOL_ACCESS_KEY_SECRET: 850181e4652dd023b7a98c58ae0d2d34bd487ee0cc3254aed6eda37307425907
+      SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      STORAGE_BACKEND: file
+      STORAGE_PUBLIC_URL: http://localhost:8000
+      TENANT_ID: stub
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - http://storage:5000/status
+      timeout: 5s
+      interval: 5s
+      retries: 3
+      start_period: 10s
+    image: supabase/storage-api:v1.60.4
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/storage
+        target: /var/lib/storage
+        bind:
+          selinux: z
+  studio:
+    container_name: supabase-studio
+    environment:
+      AUTH_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      DEFAULT_ORGANIZATION_NAME: Default Organization
+      DEFAULT_PROJECT_NAME: Default Project
+      EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
+      ENABLED_FEATURES_LOGS_ALL: "false"
+      HOSTNAME: 0.0.0.0
+      OPENAI_API_KEY: sk-proj-xxxxxxxx
+      PG_META_CRYPTO_KEY: your-encryption-key-32-chars-min
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_DB_SCHEMAS: public,graphql_public
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER_READ_WRITE: postgres
+      SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
+      STUDIO_PG_META_URL: http://meta:8080
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE
+      SUPABASE_PUBLIC_URL: http://localhost:8000
+      SUPABASE_PUBLISHABLE_KEY: ""
+      SUPABASE_SECRET_KEY: ""
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q
+      SUPABASE_URL: http://api-gw:8000
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})"
+      timeout: 10s
+      interval: 5s
+      retries: 3
+      start_period: 20s
+    image: supabase/studio:2026.08.03-sha-022b374
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/snippets
+        target: /app/snippets
+        bind:
+          selinux: z
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/functions
+        target: /app/edge-functions
+        read_only: true
+        bind:
+          selinux: z
+  supavisor:
+    command:
+      - /bin/sh
+      - -c
+      - /app/bin/migrate && /app/bin/supavisor eval "$$(cat /etc/pooler/pooler.exs)" && /app/bin/server
+    container_name: supabase-pooler
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+    environment:
+      API_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      CLUSTER_POSTGRES: "true"
+      DATABASE_URL: ecto://supabase_admin:a28dc3fe3bb8205d024605a51bf6e705@db:5432/_supabase
+      DB_POOL_SIZE: "5"
+      ERL_AFLAGS: -proto_dist inet_tcp
+      METRICS_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      POOLER_DEFAULT_POOL_SIZE: "20"
+      POOLER_MAX_CLIENT_CONN: "100"
+      POOLER_POOL_MODE: transaction
+      POOLER_TENANT_ID: your-tenant-id
+      PORT: "4000"
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PASSWORD: a28dc3fe3bb8205d024605a51bf6e705
+      POSTGRES_PORT: "5432"
+      REGION: local
+      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      VAULT_ENC_KEY: your-32-character-encryption-key
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -sSfL
+        - --head
+        - -o
+        - /dev/null
+        - http://127.0.0.1:4000/api/health
+      timeout: 5s
+      interval: 10s
+      retries: 10
+      start_period: 30s
+    image: supabase/supavisor:2.9.5
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: "5432"
+        protocol: tcp
+      - mode: ingress
+        target: 6543
+        published: "6543"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /Users/dulnithliyanage/BuildStart/arawwala_motors-customization/docker/volumes/pooler/pooler.exs
+        target: /etc/pooler/pooler.exs
+        read_only: true
+        bind:
+          selinux: z
+networks:
+  default:
+    name: supabase_default
+volumes:
+  db-config:
+    name: supabase_db-config
+  deno-cache:
+    name: supabase_deno-cache

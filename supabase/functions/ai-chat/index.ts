@@ -272,6 +272,12 @@ ${welcomeMessage}
 
 When the customer completes an order, summarize the order details beautifully with emojis and confirm.
 
+CUSTOMER INFO EXTRACTION:
+When a customer responds with the name of the product they want and/or the model of their vehicle, you MUST extract this and output a JSON block wrapped in <CUSTOMER_INFO> tags like this:
+<CUSTOMER_INFO>{"product_name": "extracted product name or null", "vehicle_model": "extracted vehicle model or null"}</CUSTOMER_INFO>
+Include this JSON block at the END of your message. The customer won't see it.
+CRITICAL: If the customer does NOT know the product name or the vehicle model, politely ask them to send a photo of the product and/or the model vehicle so that we can forward the info to our client (the business owner).
+
 CRITICAL ORDER INSTRUCTION:
 When you have collected ALL required order details and the customer confirms, you MUST include a JSON block in your response wrapped in <ORDER_JSON> tags like this:
 - For PHYSICAL products: <ORDER_JSON>{"customer_name":"...","customer_phone":"...","district":"...","customer_address":"...","order_items":[{"name":"...","price":...,"quantity":...,"product_type":"physical"}],"payment_method":"cod or bank_transfer","total_amount":...}</ORDER_JSON>
@@ -396,7 +402,38 @@ CRITICAL SECURITY RULE:
       }
     }
 
+
+    // Check if the AI response contains customer info JSON
+    const customerInfoMatches = [...responseText.matchAll(/<CUSTOMER_INFO>([\s\S]*?)<\/CUSTOMER_INFO>/g)];
+    for (const infoMatch of customerInfoMatches) {
+      try {
+        const infoData = JSON.parse(infoMatch[1]);
+        console.log("Extracted customer info:", JSON.stringify(infoData));
+        
+        const updateData: any = {};
+        if (infoData.product_name) updateData.product_name = infoData.product_name;
+        if (infoData.vehicle_model) updateData.vehicle_model = infoData.vehicle_model;
+        
+        if (Object.keys(updateData).length > 0) {
+          const { error: updateError } = await supabase
+            .from("leads")
+            .update(updateData)
+            .eq("phone_number", phoneNumber)
+            .eq("user_id", userId);
+            
+          if (updateError) {
+            console.error("Error updating lead with customer info:", updateError);
+          } else {
+            console.log("Successfully updated lead with customer info");
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing customer info JSON:", e);
+      }
+    }
+
     // Check if the AI response contains order JSON
+
     let orderCreated = false;
     const orderJsonMatches = [...responseText.matchAll(/<ORDER_JSON>([\s\S]*?)<\/ORDER_JSON>/g)];
     for (const orderJsonMatch of orderJsonMatches) {
@@ -557,11 +594,13 @@ CRITICAL SECURITY RULE:
     }
     // Remove complete tagged blocks WITH their content first
     cleanResponse = cleanResponse.replace(/<ORDER_JSON>[\s\S]*?<\/ORDER_JSON>/g, "");
+    cleanResponse = cleanResponse.replace(/<CUSTOMER_INFO>[\s\S]*?<\/CUSTOMER_INFO>/g, "");
     cleanResponse = cleanResponse.replace(/<IMAGE_URL>[\s\S]*?<\/IMAGE_URL>/g, "");
     cleanResponse = cleanResponse.replace(/<VIDEO_URL>[\s\S]*?<\/VIDEO_URL>/g, "");
     cleanResponse = cleanResponse.replace(/<USED_FAQS>[\s\S]*?<\/USED_FAQS>/g, "");
     // Remove truncated/incomplete tags and everything after them
     cleanResponse = cleanResponse.replace(/<ORDER_JSON>[\s\S]*/g, "");
+    cleanResponse = cleanResponse.replace(/<CUSTOMER_INFO>[\s\S]*/g, "");
     cleanResponse = cleanResponse.replace(/<IMAGE_URL>[\s\S]*/g, "");
     cleanResponse = cleanResponse.replace(/<VIDEO_URL>[\s\S]*/g, "");
     cleanResponse = cleanResponse.replace(/<USED_FAQS>[\s\S]*/g, "");

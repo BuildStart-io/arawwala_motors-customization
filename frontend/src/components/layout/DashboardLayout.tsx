@@ -31,6 +31,7 @@ const allBusinessNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
   { href: "/dashboard/conversations", label: "Chats", icon: MessageSquare, permission: "conversations" },
   { href: "/dashboard/leads", label: "Leads", icon: Target, permission: "leads" },
+  { href: "/dashboard/customers", label: "Customers", icon: Users, permission: "leads" },
   { href: "/dashboard/products", label: "Products", icon: Package, permission: "products" },
   { href: "/dashboard/faqs", label: "FAQs", icon: HelpCircle, permission: "faqs" },
   { href: "/dashboard/orders", label: "Orders", icon: ShoppingCart, permission: "orders" },
