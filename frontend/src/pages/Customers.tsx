@@ -86,7 +86,7 @@ export default function Customers() {
           .eq("user_id", effectiveUserId),
         supabase
           .from("leads" as any)
-          .select("id, phone_number, customer_name, assigned_to, status")
+          .select("id, phone_number, customer_name, assigned_to, status, product_name, vehicle_model")
           .eq("user_id", effectiveUserId),
         supabase
           .from("staff_accounts")
@@ -144,7 +144,7 @@ export default function Customers() {
         if (missing.length > 0) {
           const { data: inserted } = await (supabase.from("leads" as any) as any)
             .upsert(missing, { onConflict: "user_id,phone_number" })
-            .select("id, phone_number, customer_name, assigned_to, status");
+            .select("id, phone_number, customer_name, assigned_to, status, product_name, vehicle_model");
           ((inserted as any[]) || []).forEach((l) => leadMap.set(l.phone_number, l));
         }
       }
@@ -165,6 +165,8 @@ export default function Customers() {
           inbound_count: s?.inbound || 0,
           has_order: orderPhones.has(phone),
           last_time: s?.last || null,
+          product_name: l?.product_name || null,
+          vehicle_model: l?.vehicle_model || null,
         };
       });
 
@@ -462,19 +464,6 @@ export default function Customers() {
                           {row.phone_number} · {row.inbound_count} message
                           {row.inbound_count === 1 ? "" : "s"}
                         </p>
-                        <div className="flex flex-col gap-1 mt-2 text-sm text-muted-foreground">
-                          {row.product_name && (
-                            <div className="flex items-center gap-1">
-                              <span className="font-semibold text-foreground">Product:</span> {row.product_name}
-                            </div>
-                          )}
-                          {row.vehicle_model && (
-                            <div className="flex items-center gap-1">
-                              <span className="font-semibold text-foreground">Vehicle Model:</span> {row.vehicle_model}
-                            </div>
-                          )}
-                        </div>
-
                         <div className="flex flex-col gap-1 mt-2 text-sm text-muted-foreground">
                           {row.product_name && (
                             <div className="flex items-center gap-1">
