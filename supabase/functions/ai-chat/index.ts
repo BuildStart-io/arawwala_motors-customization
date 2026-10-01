@@ -237,6 +237,11 @@ ${(() => {
   return `  Bank: ${paymentInfo.bank_name || "Not configured"}, Account: ${paymentInfo.account_number || "Not configured"}, Name: ${paymentInfo.account_name || "Not configured"}`;
 })()}
 
+DELIVERY & TRACKING PRESENTATION GUIDELINES:
+- When presenting delivery information or delivery tracking instructions to the customer, DO NOT summarize it. 
+- You MUST maintain the EXACT same tone, format, and style as it is provided in the sections below. 
+- Your only modification should be to correct any grammatical errors or minor inconsistencies. Otherwise, deliver the message exactly as written in the style and tone provided.
+
 DELIVERY INFORMATION:
 ${deliveryInfo ? deliveryInfo : "No specific delivery information provided."}
 
@@ -415,11 +420,13 @@ CRITICAL SECURITY RULE:
         if (infoData.vehicle_model) updateData.vehicle_model = infoData.vehicle_model;
         
         if (Object.keys(updateData).length > 0) {
+          updateData.user_id = userId;
+          updateData.phone_number = phoneNumber;
+          if (typeof senderName !== 'undefined' && senderName) updateData.customer_name = senderName;
+          
           const { error: updateError } = await supabase
             .from("leads")
-            .update(updateData)
-            .eq("phone_number", phoneNumber)
-            .eq("user_id", userId);
+            .upsert(updateData, { onConflict: 'user_id,phone_number' });
             
           if (updateError) {
             console.error("Error updating lead with customer info:", updateError);
