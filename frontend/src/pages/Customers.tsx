@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useEffectivePlan } from "@/hooks/useEffectivePlan";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Search, Car } from "lucide-react";
+import { Users, Search, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface CustomerRow {
@@ -44,6 +45,17 @@ export default function Customers() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const deleteCustomer = async (id: string) => {
+    try {
+      const { error } = await supabase.from("leads").delete().eq("id", id);
+      if (error) throw error;
+      setRows((prev) => prev.filter((r) => r.id !== id));
+    } catch (error) {
+      console.error("Failed to delete customer:", error);
+    }
+  };
+
 
   const filteredCustomers = rows.filter((r) => {
     // Only include customers who have provided a product name or vehicle model
@@ -122,8 +134,13 @@ export default function Customers() {
                       </div>
                     </div>
                     
-                    <div className="text-xs text-muted-foreground hidden md:block">
-                      Last updated: {new Date(row.updated_at).toLocaleDateString()}
+                    <div className="flex items-center gap-4">
+                      <div className="text-xs text-muted-foreground hidden md:block">
+                        Last updated: {new Date(row.updated_at).toLocaleDateString()}
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => deleteCustomer(row.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 ))}
