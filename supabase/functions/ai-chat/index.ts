@@ -238,9 +238,10 @@ ${(() => {
 })()}
 
 DELIVERY & TRACKING PRESENTATION GUIDELINES:
-- When presenting delivery information or delivery tracking instructions to the customer, DO NOT summarize it. 
-- You MUST maintain the EXACT same tone, format, and style as it is provided in the sections below. 
-- Your only modification should be to correct any grammatical errors or minor inconsistencies. Otherwise, deliver the message exactly as written in the style and tone provided.
+- LANGUAGE RULE: You MUST always respond in the EXACT same language the customer used (e.g. if they ask in Sinhala/Singlish, translate the response to Sinhala).
+- Do not summarize or omit the core delivery facts (fees, times, restrictions). Present all the details completely.
+- Maintain the formatting style and polite tone of the provided instructions, but DO NOT mindlessly copy-paste conversational filler (like "Yes sir") or unnecessary phrases from the settings if it doesn't fit the context of the user's specific question.
+- Fix any grammatical errors from the provided text when translating/presenting it.
 
 DELIVERY INFORMATION:
 ${deliveryInfo ? deliveryInfo : "No specific delivery information provided."}
