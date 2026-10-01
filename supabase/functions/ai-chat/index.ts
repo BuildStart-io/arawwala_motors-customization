@@ -625,7 +625,7 @@ CRITICAL SECURITY RULE:
     // Remove any remaining JSON-like structures with 2+ key-value pairs
     cleanResponse = cleanResponse.replace(/\{\s*"[^"]+"\s*:[\s\S]*?\}/g, "");
     // Remove any leftover image URLs on their own line (https://...supabase... patterns)
-    cleanResponse = cleanResponse.replace(/^https?:\/\/[^\s]+$/gm, "");
+    // cleanResponse = cleanResponse.replace(/^https?:\/\/[^\s]+$/gm, ""); // Removed: this aggressively deletes legitimate tracking links!
     // Remove standalone UUIDs that leak from FAQ IDs or correlation IDs
     cleanResponse = cleanResponse.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "");
     // Remove [FAQ_ID:...] references that may leak into response
