@@ -68,7 +68,7 @@ export default function Customers() {
   const isOwner = !isStaff;
 
   const load = useCallback(async () => {
-    if (!effectiveUserId || !isGrowth) {
+    if (!effectiveUserId) {
       setLoading(false);
       return;
     }
@@ -340,29 +340,6 @@ export default function Customers() {
     );
   }
 
-  if (!isGrowth) {
-    return (
-      <DashboardLayout>
-        <div className="max-w-xl mx-auto mt-10">
-          <Card>
-            <CardHeader className="text-center">
-              <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-2">
-                <Lock className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <CardTitle>Leads is a Growth plan feature</CardTitle>
-              <CardDescription>
-                Upgrade to the Growth plan to track customers, assign leads to your staff and
-                follow up on qualified buyers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-center">
-              <Button onClick={() => navigate("/dashboard/settings")}>View plan details</Button>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout>
