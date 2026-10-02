@@ -38,7 +38,7 @@ async function getAccessToken(serviceAccount: {
     .replace(/-----END PRIVATE KEY-----/, "")
     .replace(/\n/g, "");
 
-  const binaryKey = Uint8Array.schema("arawwala_motors_customization").from(atob(pemContents), (c) => c.charCodeAt(0));
+  const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
 
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
@@ -96,7 +96,8 @@ serve(async (req) => {
     // Get all device tokens for this user
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { db: { schema: 'arawwala_motors_customization' } }
     );
 
     const { data: tokens, error } = await supabaseAdmin

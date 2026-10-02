@@ -15,7 +15,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { db: { schema: 'arawwala_motors_customization' } });
 
     // Verify caller is super_admin
     const authHeader = req.headers.get("Authorization");
@@ -29,7 +29,7 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
 
     // Use getClaims for JWT validation (works with ES256 signing on Lovable Cloud)
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, { db: { schema: 'arawwala_motors_customization' },
       global: { headers: { Authorization: authHeader } },
     });
     const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
@@ -43,12 +43,15 @@ serve(async (req) => {
     const caller = { id: claimsData.claims.sub as string };
 
     // Check super_admin role
-    const { data: roleData } = await supabase
+    console.log("Checking role for caller:", caller.id);
+    const { data: roleData, error: roleError } = await supabase
       .schema("arawwala_motors_customization").from("user_roles")
       .select("role")
       .eq("user_id", caller.id)
       .eq("role", "super_admin")
       .single();
+      
+    console.log("Role Data:", roleData, "Role Error:", roleError);
 
     if (!roleData) {
       return new Response(JSON.stringify({ error: "Forbidden: Super Admin access required" }), {
