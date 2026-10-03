@@ -6,3 +6,4 @@ dist/
 .gemini/
 docker/volumes/db/data
 db/03_cron_filled.sql
+*.exp
