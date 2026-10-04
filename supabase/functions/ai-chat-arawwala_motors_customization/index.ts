@@ -585,7 +585,7 @@ CRITICAL SECURITY RULE:
     }
 
     // Extract image URLs if present
-    const imageUrlMatches = Array.schema("arawwala_motors_customization").from(responseText.matchAll(/<IMAGE_URL>([\s\S]*?)<\/IMAGE_URL>/g));
+    const imageUrlMatches = Array.from(responseText.matchAll(/<IMAGE_URL>([\s\S]*?)<\/IMAGE_URL>/g));
     const imageUrls = imageUrlMatches.map(m => m[1].trim());
     const imageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
     // Extract video URL if present
