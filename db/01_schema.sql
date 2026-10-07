@@ -64,7 +64,7 @@ CREATE FUNCTION arawwala_motors_customization.can_read_usage(_user_id uuid) RETU
     AS $$
   SELECT auth.uid() IS NULL
       OR auth.uid() = _user_id
-      OR arawwala_motors_customization.has_role(auth.uid(), 'super_admin'::app_role)
+      OR arawwala_motors_customization.has_role(auth.uid(), 'super_admin'::arawwala_motors_customization.app_role)
       OR arawwala_motors_customization.is_staff_of(auth.uid(), _user_id)
 $$;
 
