@@ -53,6 +53,7 @@ export default function Products() {
   const [deliveryPrice, setDeliveryPrice] = useState("");
   const [productType, setProductType] = useState("physical");
   const [variations, setVariations] = useState<Variation[]>([]);
+  const [hasVariationImages, setHasVariationImages] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(true);
@@ -88,6 +89,7 @@ export default function Products() {
     setDeliveryPrice("");
     setProductType("physical");
     setVariations([]);
+    setHasVariationImages(false);
     setImages([]);
     setVideoUrl(null);
     setIsActive(true);
@@ -101,7 +103,12 @@ export default function Products() {
     setPrice(product.price.toString());
     setDeliveryPrice(product.delivery_price?.toString() || "0");
     setProductType(product.product_type);
-    setVariations(Array.isArray(product.variations) ? (product.variations as Variation[]) : []);
+    const vars = Array.isArray(product.variations) ? (product.variations as Variation[]) : [];
+    setVariations(vars);
+    const hasAnyVarImages = vars.some((v) =>
+      v.options?.some((o) => (o.images && o.images.length > 0) || (o as any).image)
+    );
+    setHasVariationImages(hasAnyVarImages);
     setImages(Array.isArray(product.images) ? product.images : []);
     setVideoUrl(product.video_url || null);
     setIsActive(product.is_active);
@@ -120,7 +127,7 @@ export default function Products() {
         delivery_price: productType === "physical" ? parseFloat(deliveryPrice || "0") : 0,
         product_type: productType,
         variations: variations as unknown as import("@/integrations/supabase/types").Json,
-        images,
+        images: hasVariationImages ? [] : images,
         video_url: videoUrl,
         is_active: isActive,
         user_id: effectiveUserId || user!.id,
@@ -290,9 +297,16 @@ export default function Products() {
                   </div>
                 </div>
 
-                <VariationEditor variations={variations} onChange={setVariations} />
+                <VariationEditor
+                  variations={variations}
+                  onChange={setVariations}
+                  hasVariationImages={hasVariationImages}
+                  onHasVariationImagesChange={setHasVariationImages}
+                />
 
-                <ProductImageUpload images={images} onChange={setImages} maxImages={maxImages} />
+                {!hasVariationImages && (
+                  <ProductImageUpload images={images} onChange={setImages} maxImages={maxImages} />
+                )}
 
                 <ProductVideoUpload videoUrl={videoUrl} onChange={setVideoUrl} />
 

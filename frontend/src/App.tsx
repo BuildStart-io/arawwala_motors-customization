@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -12,7 +12,6 @@ import Faqs from "./pages/Faqs";
 import Orders from "./pages/Orders";
 import Conversations from "./pages/Conversations";
 import Leads from "./pages/Leads";
-import Customers from "./pages/Customers";
 import Settings from "./pages/Settings";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminAccounts from "./pages/AdminAccounts";
@@ -45,7 +44,7 @@ const App = () => (
           <Route path="/dashboard/orders" element={<Orders />} />
           <Route path="/dashboard/conversations" element={<Conversations />} />
           <Route path="/dashboard/leads" element={<Leads />} />
-          <Route path="/dashboard/customers" element={<Customers />} />
+          <Route path="/dashboard/customers" element={<Navigate to="/dashboard/leads" replace />} />
           <Route path="/dashboard/settings" element={<Settings />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/accounts" element={<AdminAccounts />} />

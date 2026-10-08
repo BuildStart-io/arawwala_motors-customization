@@ -1,9 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, X, ChevronDown, ChevronRight, ImagePlus, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
+import { uploadMedia, deleteMedia } from "@/lib/mediaStorage";
+import { useToast } from "@/hooks/use-toast";
 
 export interface SubVariantOption {
   label: string;
@@ -19,6 +21,7 @@ export interface SubVariant {
 export interface VariationOption {
   label: string;
   price: number;
+  images?: string[];
   subVariants?: SubVariant[];
 }
 
@@ -30,9 +33,18 @@ export interface Variation {
 interface VariationEditorProps {
   variations: Variation[];
   onChange: (variations: Variation[]) => void;
+  hasVariationImages?: boolean;
+  onHasVariationImagesChange?: (enabled: boolean) => void;
 }
 
-export default function VariationEditor({ variations, onChange }: VariationEditorProps) {
+export default function VariationEditor({
+  variations,
+  onChange,
+  hasVariationImages = false,
+  onHasVariationImagesChange,
+}: VariationEditorProps) {
+  const { toast } = useToast();
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [expandedOptions, setExpandedOptions] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (key: string) => {
@@ -84,6 +96,71 @@ export default function VariationEditor({ variations, onChange }: VariationEdito
       options: updated[varIndex].options.map((o, i) => (i === optIndex ? option : o)),
     };
     onChange(updated);
+  };
+
+  const handleOptionImagesUpload = async (
+    varIndex: number,
+    optIndex: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const key = `${varIndex}-${optIndex}`;
+    setUploadingKey(key);
+
+    try {
+      const uploaded: string[] = [];
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) continue;
+        if (file.size > 5 * 1024 * 1024) {
+          toast({
+            title: "File too large",
+            description: `${file.name} exceeds 5MB limit.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        const url = await uploadMedia(file, "products");
+        uploaded.push(url);
+      }
+
+      if (uploaded.length > 0) {
+        const updated = [...variations];
+        const option = { ...updated[varIndex].options[optIndex] };
+        option.images = [...(option.images || []), ...uploaded];
+        updated[varIndex] = {
+          ...updated[varIndex],
+          options: updated[varIndex].options.map((o, i) => (i === optIndex ? option : o)),
+        };
+        onChange(updated);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingKey(null);
+      e.target.value = "";
+    }
+  };
+
+  const removeOptionImage = (varIndex: number, optIndex: number, imgIndex: number) => {
+    const updated = [...variations];
+    const option = { ...updated[varIndex].options[optIndex] };
+    const currentImages = option.images || [];
+    const urlToRemove = currentImages[imgIndex];
+    option.images = currentImages.filter((_, i) => i !== imgIndex);
+    updated[varIndex] = {
+      ...updated[varIndex],
+      options: updated[varIndex].options.map((o, i) => (i === optIndex ? option : o)),
+    };
+    onChange(updated);
+    if (urlToRemove) {
+      deleteMedia(urlToRemove).catch(() => {});
+    }
   };
 
   // Sub-variant helpers
@@ -183,7 +260,21 @@ export default function VariationEditor({ variations, onChange }: VariationEdito
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label>Variations</Label>
+        <div className="flex items-center gap-3">
+          <Label className="text-sm font-semibold">Variations</Label>
+          {onHasVariationImagesChange && (
+            <div className="flex items-center space-x-2 border-l pl-3">
+              <Switch
+                id="toggle-variation-photos"
+                checked={hasVariationImages}
+                onCheckedChange={onHasVariationImagesChange}
+              />
+              <Label htmlFor="toggle-variation-photos" className="text-xs text-muted-foreground cursor-pointer font-normal">
+                Upload photos to variations
+              </Label>
+            </div>
+          )}
+        </div>
         <Button type="button" variant="outline" size="sm" onClick={addVariation}>
           <Plus className="mr-1 h-3 w-3" />
           Add Variation
@@ -270,6 +361,51 @@ export default function VariationEditor({ variations, onChange }: VariationEdito
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
+
+                  {/* Variation Photos for this option */}
+                  {hasVariationImages && (
+                    <div className="flex flex-wrap items-center gap-2 pl-7 pt-1 pb-1">
+                      {(option.images || []).map((imgUrl, imgIdx) => (
+                        <div
+                          key={imgIdx}
+                          className="relative group w-12 h-12 rounded-md border overflow-hidden bg-muted flex-shrink-0"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`${option.label || "Variation"} photo ${imgIdx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeOptionImage(varIndex, optIndex, imgIdx)}
+                            className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Remove photo"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <label className="w-12 h-12 rounded-md border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors text-muted-foreground hover:text-foreground flex-shrink-0">
+                        {uploadingKey === `${varIndex}-${optIndex}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <ImagePlus className="h-3.5 w-3.5" />
+                            <span className="text-[9px] mt-0.5 font-medium">+ Photo</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          className="hidden"
+                          disabled={uploadingKey === `${varIndex}-${optIndex}`}
+                          onChange={(e) => handleOptionImagesUpload(varIndex, optIndex, e)}
+                        />
+                      </label>
+                    </div>
+                  )}
 
                   {/* Sub-variants */}
                   {isExpanded && option.subVariants && option.subVariants.length > 0 && (

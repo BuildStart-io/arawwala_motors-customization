@@ -145,6 +145,11 @@ serve(async (req) => {
           const opts = v.options?.map((o: any) => {
             if (typeof o !== "object") return o;
             let optStr = `${o.label}: LKR ${o.price}`;
+            if (o.images && Array.isArray(o.images) && o.images.length > 0) {
+              optStr += ` (Images: ${o.images.join(", ")})`;
+            } else if (o.image) {
+              optStr += ` (Image: ${o.image})`;
+            }
             if (o.subVariants && Array.isArray(o.subVariants) && o.subVariants.length > 0) {
               const subLines = o.subVariants.map((sv: any) => {
                 const reqTag = sv.required ? " (REQUIRED)" : " (optional)";

@@ -63,7 +63,15 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
     }
 
-    if (event !== "message" && event !== "message.any") {
+    const isCallEvent = (
+      event === "call.received" ||
+      event === "call.rejected" ||
+      event === "call.accepted" ||
+      event === "call" ||
+      (typeof event === "string" && event.startsWith("call."))
+    );
+
+    if (event !== "message" && event !== "message.any" && !isCallEvent) {
       console.log(`[${correlationId}] Ignoring event: ${event}`);
       return new Response(JSON.stringify({ ok: true, skipped: event }), { headers: jsonHeaders });
     }
@@ -72,7 +80,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, skipped: "fromMe" }), { headers: jsonHeaders });
     }
 
-    const fromJid = String(wp.from || wp._data?.key?.remoteJid || "");
+    const fromJid = String(
+      wp.from ||
+      wp.caller ||
+      wp.chatId ||
+      wp._data?.key?.remoteJid ||
+      ""
+    );
     if (/@g\.us$/i.test(fromJid) || /@broadcast$/i.test(fromJid) || /@newsletter$/i.test(fromJid)) {
       return new Response(JSON.stringify({ ok: true, skipped: "non_individual" }), { headers: jsonHeaders });
     }
@@ -113,28 +127,53 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "No phone number" }), { status: 400, headers: jsonHeaders });
     }
 
+    let messageText = "";
+    let messageType = "text";
 
-    // Text body — WAHA usually puts it on payload.body
-    const messageText = wp.body
-      || wp._data?.message?.conversation
-      || wp._data?.message?.extendedTextMessage?.text
-      || "";
+    if (isCallEvent) {
+      messageType = "call_log";
+      messageText = wp.isVideo ? "Missed video call" : "Missed voice call";
+    } else {
+      // Text body — WAHA usually puts it on payload.body
+      messageText = wp.body
+        || wp._data?.message?.conversation
+        || wp._data?.message?.extendedTextMessage?.text
+        || "";
 
-    // Message type — derive from WAHA `type` or `_data.message.*` keys
-    let messageType = wp.type || "text";
-    if (messageType === "chat") messageType = "text";
-    
-    const wMsg = wp._data?.message || {};
-    if (wMsg.imageMessage) messageType = "image";
-    else if (wMsg.videoMessage) messageType = "video";
-    else if (wMsg.audioMessage) messageType = wMsg.audioMessage?.ptt ? "ptt" : "audio";
-    else if (wMsg.documentMessage) messageType = "document";
-    else if (wMsg.stickerMessage) messageType = "sticker";
-    else if (wMsg.locationMessage) messageType = "location";
-    else if (wp.hasMedia && !messageText && messageType === "text") messageType = "image";
+      // Message type — derive from WAHA `type` or `_data.message.*` keys
+      messageType = wp.type || "text";
+      if (messageType === "chat") messageType = "text";
+      
+      const wMsg = wp._data?.message || {};
+      if (wMsg.imageMessage) messageType = "image";
+      else if (wMsg.videoMessage) messageType = "video";
+      else if (wMsg.audioMessage) messageType = wMsg.audioMessage?.ptt ? "ptt" : "audio";
+      else if (wMsg.documentMessage) messageType = "document";
+      else if (wMsg.stickerMessage) messageType = "sticker";
+      else if (wMsg.locationMessage) messageType = "location";
+      else if (wp.hasMedia && !messageText && messageType === "text") messageType = "image";
 
-    const senderName = wp._data?.pushName || wp._data?.notifyName || wp.notifyName || "Unknown";
-    const wahaMessageId = wp.id || wp._data?.key?.id || `${phoneNumber}-${Date.now()}`;
+      // Detect missed calls delivered as messages or call logs
+      if (
+        messageType === "call_log" ||
+        wp.type === "call_log" ||
+        wp._data?.type === "call_log" ||
+        wp.subtype?.includes("call") ||
+        wMsg.callLogMessage ||
+        wp._data?.messageStubType === 40 ||
+        wp._data?.messageStubType === 41
+      ) {
+        messageType = "call_log";
+        if (!messageText) {
+          messageText = (wp._data?.messageStubType === 41 || wp.isVideo) ? "Missed video call" : "Missed voice call";
+        }
+      }
+    }
+
+    const senderName = wp._data?.pushName || wp._data?.notifyName || wp.notifyName || wp.callerName || (isCallEvent ? "Caller" : "Unknown");
+    const wahaMessageId = isCallEvent
+      ? (wp.id ? `call-${wp.id}` : `call-${phoneNumber}-${Math.floor(Date.now() / 30000)}`)
+      : (wp.id || wp._data?.key?.id || `${phoneNumber}-${Date.now()}`);
 
     if (!userId) {
       console.error(`[${correlationId}] No user mapped to WAHA session "${sessionName}"`);

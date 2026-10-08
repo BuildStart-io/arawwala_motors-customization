@@ -7,6 +7,87 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const DEFAULT_REPLY_KEYWORDS = [
+  // English
+  "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "help", "menu", "start", "info", "details",
+  // Singlish
+  "halo", "helo", "hai", "kohomada", "ayubowan", "subha udasanak", "suba udasanak", "subha dawasak", "suba dawasak", "wisthara", "visthara",
+  // Sinhala
+  "හායි", "හලෝ", "හෙලෝ", "ආයුබෝවන්", "සුබ උදෑසනක්", "සුබ දවසක්", "සුබ සන්ධ්‍යාවක්", "විස්තර", "කොහොමද"
+];
+
+function isMissedCall(messageType: string, messageText: string, rawBody: any): boolean {
+  if (messageType === "call" || messageType === "call_log" || messageType === "missed_call") {
+    return true;
+  }
+  const event = rawBody?.event || rawBody?.raw_payload?.event;
+  if (typeof event === "string" && (event === "call.received" || event === "call.rejected" || event.startsWith("call."))) {
+    return true;
+  }
+  const textLower = (messageText || "").normalize("NFC").toLowerCase().trim();
+  if (
+    textLower.includes("missed call") ||
+    textLower.includes("missed voice call") ||
+    textLower.includes("missed video call") ||
+    textLower.includes("miss call") ||
+    textLower.includes("misscall") ||
+    textLower.includes("මඟහැරුණු") ||
+    textLower.includes("මගහැරුණු") ||
+    textLower.includes("ඇමතුම") ||
+    textLower.includes("තවறிய")
+  ) {
+    return true;
+  }
+  const wpType = rawBody?.payload?.type || rawBody?.raw_payload?.payload?.type || rawBody?.payload?._data?.type;
+  if (wpType === "call_log") {
+    return true;
+  }
+  return false;
+}
+
+function matchesReplyKeyword(messageText: string, keywords: string[]): boolean {
+  if (!messageText || !Array.isArray(keywords) || keywords.length === 0) return false;
+  
+  // Normalize Unicode and lowercase
+  const rawLower = messageText.normalize("NFC").toLowerCase().trim();
+  if (!rawLower) return false;
+
+  // Split into tokens by whitespace and punctuation
+  const tokens = rawLower
+    .split(/[\s\p{P}\p{S}]+/u)
+    .map(t => t.trim())
+    .filter(Boolean);
+
+  const cleanText = tokens.join(" ");
+
+  for (const kw of keywords) {
+    if (!kw) continue;
+    const cleanKw = kw.normalize("NFC").toLowerCase().trim();
+    if (!cleanKw) continue;
+
+    // 1. Exact match of entire message
+    if (rawLower === cleanKw || cleanText === cleanKw) {
+      return true;
+    }
+
+    // 2. Single-word keyword: must match one of the tokens exactly
+    if (!cleanKw.includes(" ")) {
+      if (tokens.includes(cleanKw)) {
+        return true;
+      }
+    } else {
+      // 3. Multi-word keyword (e.g., "good morning", "සුබ උදෑසනක්")
+      const kwTokens = cleanKw.split(/[\s\p{P}\p{S}]+/u).filter(Boolean);
+      const kwPhrase = kwTokens.join(" ");
+      if (cleanText === kwPhrase || cleanText.includes(` ${kwPhrase} `) || cleanText.startsWith(`${kwPhrase} `) || cleanText.endsWith(` ${kwPhrase}`)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -156,20 +237,27 @@ async function processMessage(
     isVoice = true;
   }
 
+  const isMissed = isMissedCall(messageType, messageText, body);
+
+  let formattedIncomingMsg = isVoice ? "🎤 [Voice Note: Transcribing...]" : messageText;
+  if (isMissed) {
+    formattedIncomingMsg = "📞 Missed call";
+  }
+
   // Check if this is a media message — if so, store it but do NOT reply
   const mediaTypes = ["image", "video", "document", "sticker", "vcard", "location"];
-  let isMediaMessage = mediaTypes.includes(messageType) || 
+  let isMediaMessage = !isMissed && (mediaTypes.includes(messageType) || 
     (!messageText && messageType !== "text" && !isVoice) ||
-    (body?.data?.messages?.messageBody === undefined && body?.data?.messages?.message?.conversation === undefined && !isVoice && !messageText);
+    (body?.data?.messages?.messageBody === undefined && body?.data?.messages?.message?.conversation === undefined && !isVoice && !messageText));
 
   // 1. Store the incoming message in conversations
   mark("store_inbound_start");
   const { data: inboundMsg, error: insertError } = await supabase.schema("arawwala_motors_customization").from("conversations").insert({
     phone_number: phoneNumber,
-    message: isVoice ? "🎤 [Voice Note: Transcribing...]" : messageText,
+    message: formattedIncomingMsg,
     direction: "inbound",
-    message_type: messageType,
-    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: isVoice },
+    message_type: isMissed ? "call_log" : messageType,
+    metadata: { senderName, event: body?.event, raw: body, correlationId: corrId, is_voice: isVoice, is_missed_call: isMissed },
     user_id: userId,
   }).select('id').single();
   mark("store_inbound_end");
@@ -261,18 +349,40 @@ async function processMessage(
     return;
   }
 
-  // 4. Check if first message (for welcome message flow)
-  const { count: convoCount } = await supabase
-    .schema("arawwala_motors_customization").from("conversations")
-    .select("id", { count: "exact", head: true })
-    .eq("phone_number", phoneNumber)
-    .eq("user_id", userId);
+  // 4. Welcome Message Trigger Check:
+  // The welcome message is triggered when the user types a certain keyword or has left a missed call.
+  // Else the bot should reply to the message normally.
+  const { data: welcomeSettings } = await supabase
+    .schema("arawwala_motors_customization").from("settings")
+    .select("value")
+    .eq("key", "welcome_message")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  const isFirstMessage = (convoCount || 0) <= 1;
+  const wVal = welcomeSettings?.value || {};
+  const replyKeywords: string[] = Array.isArray(wVal.reply_keywords)
+    ? wVal.reply_keywords
+    : (Array.isArray(wVal.trigger_keywords) ? wVal.trigger_keywords : DEFAULT_REPLY_KEYWORDS);
 
-  if (isFirstMessage) {
-    const sent = await handleWelcomeMessage(supabase, supabaseUrl, supabaseServiceKey, userId, phoneNumber, messageText, sessionApiKey, corrId, timings, mark);
-    if (sent) return;
+  const isKeywordMatch = !isMissed && matchesReplyKeyword(messageText, replyKeywords);
+
+  if (isMissed || isKeywordMatch) {
+    console.log(`[${corrId}] Triggering welcome message (isMissed: ${isMissed}, isKeywordMatch: ${isKeywordMatch})`);
+    const sent = await handleWelcomeMessage(
+      supabase,
+      supabaseUrl,
+      supabaseServiceKey,
+      userId,
+      phoneNumber,
+      wVal,
+      sessionApiKey,
+      corrId,
+      timings,
+      mark
+    );
+    if (sent || isMissed) {
+      return;
+    }
   }
 
   // 5. Get conversation history
@@ -415,37 +525,25 @@ async function handleWelcomeMessage(
   supabaseServiceKey: string,
   userId: string,
   phoneNumber: string,
-  messageText: string,
+  welcomeValue: any,
   sessionApiKey: string,
   corrId: string,
   timings: Record<string, number>,
   mark: (label: string) => void
 ): Promise<boolean> {
-  const { data: welcomeSettings } = await supabase
-    .schema("arawwala_motors_customization").from("settings")
-    .select("value")
-    .eq("key", "welcome_message")
-    .eq("user_id", userId)
-    .single();
-
-  // Check bypass triggers
-  const bypassTriggers: string[] = welcomeSettings?.value?.bypass_triggers || [];
-  const msgLower = messageText.toLowerCase();
-  const shouldBypass = bypassTriggers.length > 0 && bypassTriggers.some((t: string) => msgLower.includes(t));
-
-  if (shouldBypass) {
-    console.log(`[${corrId}] Bypass trigger matched, skipping welcome`);
-    return false;
-  }
-
-  const welcomeText: string = welcomeSettings?.value?.text || "";
-  const welcomeMediaUrls: string[] = welcomeSettings?.value?.media_urls || [];
-  const singleMedia = welcomeSettings?.value?.media_url;
+  const welcomeText: string = welcomeValue?.text || "";
+  const welcomeMediaUrls: string[] = welcomeValue?.media_urls || [];
+  const singleMedia = welcomeValue?.media_url;
   if (singleMedia && !welcomeMediaUrls.includes(singleMedia)) {
     welcomeMediaUrls.unshift(singleMedia);
   }
 
-  const welcomeSequence: Array<{ type: string; url?: string }> = welcomeSettings?.value?.welcome_sequence || [];
+  const welcomeSequence: Array<{ type: string; url?: string }> = welcomeValue?.welcome_sequence || [];
+
+  if (!welcomeText.trim() && welcomeMediaUrls.length === 0 && welcomeSequence.length === 0) {
+    console.log(`[${corrId}] Welcome message is empty, nothing to send`);
+    return false;
+  }
 
   mark("send_start");
   if (welcomeSequence.length > 0) {
@@ -480,7 +578,7 @@ async function handleWelcomeMessage(
     console.log(`[${corrId}] Stored welcome message in conversation history`);
   }
 
-  console.log(`[${corrId}] Welcome message sent, skipping AI for first message`);
+  console.log(`[${corrId}] Welcome message sent successfully`);
   return true;
 }
 

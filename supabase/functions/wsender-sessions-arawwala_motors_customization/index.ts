@@ -187,7 +187,7 @@ serve(async (req) => {
           noweb: { store: { enabled: true, fullSync: true } },
           webhooks: [{
             url: webhookUrl,
-            events: ["message", "session.status"],
+            events: ["message", "session.status", "call.received", "call.accepted", "call.rejected", "call"],
             retries: { policy: "linear", delaySeconds: 2, attempts: 3 },
           }],
         };

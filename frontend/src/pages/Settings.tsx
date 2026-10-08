@@ -24,8 +24,20 @@ interface PaymentAccount {
   account_name: string;
 }
 
+const DEFAULT_REPLY_KEYWORDS = [
+  "hi", "hello", "hey", "halo", "helo", "start", "menu", "info", "ayubowan", "kohomada",
+  "හායි", "හලෝ", "හෙලෝ", "ආයුබෝවන්", "සුබ උදෑසනක්", "සුබ දවසක්", "විස්තර", "කොහොමද"
+];
+
 interface SettingsData {
-  welcome_message: { text: string; media_url?: string; bypass_triggers?: string[] };
+  welcome_message: { 
+    text: string; 
+    media_url?: string; 
+    media_urls?: string[];
+    reply_keywords?: string[];
+    welcome_sequence?: Array<{ type: string; url?: string }>;
+    bypass_triggers?: string[];
+  };
   payment_info: { accounts: PaymentAccount[] };
   auto_responses: { enabled: boolean };
 }
@@ -49,8 +61,8 @@ export default function Settings() {
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [welcomeMediaUrl, setWelcomeMediaUrl] = useState("");
   const [welcomeMediaUrls, setWelcomeMediaUrls] = useState<string[]>([]);
-  const [bypassTriggers, setBypassTriggers] = useState<string[]>([]);
-  const [newBypassTrigger, setNewBypassTrigger] = useState("");
+  const [replyKeywords, setReplyKeywords] = useState<string[]>([]);
+  const [newReplyKeyword, setNewReplyKeyword] = useState("");
   // Welcome sequence: ordered list of items to send
   type WelcomeSequenceItem = { type: "text" } | { type: "media"; url: string };
   const [welcomeSequence, setWelcomeSequence] = useState<WelcomeSequenceItem[]>([]);
@@ -59,12 +71,12 @@ export default function Settings() {
   const welcomeMessageRef = useRef(welcomeMessage);
   const welcomeMediaUrlRef = useRef(welcomeMediaUrl);
   const welcomeMediaUrlsRef = useRef(welcomeMediaUrls);
-  const bypassTriggersRef = useRef(bypassTriggers);
+  const replyKeywordsRef = useRef(replyKeywords);
   const welcomeSequenceRef = useRef(welcomeSequence);
   welcomeMessageRef.current = welcomeMessage;
   welcomeMediaUrlRef.current = welcomeMediaUrl;
   welcomeMediaUrlsRef.current = welcomeMediaUrls;
-  bypassTriggersRef.current = bypassTriggers;
+  replyKeywordsRef.current = replyKeywords;
   welcomeSequenceRef.current = welcomeSequence;
 
   // Payment Info - Multiple Bank Accounts
@@ -143,7 +155,13 @@ export default function Settings() {
             setWelcomeMediaUrl(wVal?.media_url || "");
             const urls: string[] = wVal?.media_urls || [];
             setWelcomeMediaUrls(urls);
-            setBypassTriggers(wVal?.bypass_triggers || []);
+            if (Array.isArray(wVal?.reply_keywords)) {
+              setReplyKeywords(wVal.reply_keywords);
+            } else if (Array.isArray(wVal?.trigger_keywords)) {
+              setReplyKeywords(wVal.trigger_keywords);
+            } else {
+              setReplyKeywords(DEFAULT_REPLY_KEYWORDS);
+            }
             // Load sequence or build default
             if (wVal?.welcome_sequence && Array.isArray(wVal.welcome_sequence)) {
               setWelcomeSequence(wVal.welcome_sequence);
@@ -480,8 +498,9 @@ export default function Settings() {
       text: welcomeMessageRef.current, 
       media_url: welcomeMediaUrlRef.current || null,
       media_urls: welcomeMediaUrlsRef.current,
-      bypass_triggers: bypassTriggersRef.current,
+      reply_keywords: replyKeywordsRef.current,
       welcome_sequence: welcomeSequenceRef.current,
+      bypass_triggers: [],
     });
   };
 
@@ -504,8 +523,9 @@ export default function Settings() {
           text: welcomeMessageRef.current, 
           media_url: welcomeMediaUrlRef.current || null,
           media_urls: newUrls,
-          bypass_triggers: bypassTriggersRef.current,
+          reply_keywords: replyKeywordsRef.current,
           welcome_sequence: newSequence,
+          bypass_triggers: [],
         });
       }, 100);
 
@@ -529,8 +549,9 @@ export default function Settings() {
           text: welcomeMessageRef.current, 
           media_url: welcomeMediaUrlRef.current || null,
           media_urls: welcomeMediaUrlsRef.current,
-          bypass_triggers: bypassTriggersRef.current,
+          reply_keywords: replyKeywordsRef.current,
           welcome_sequence: arr,
+          bypass_triggers: [],
         });
       }, 100);
       
@@ -538,19 +559,19 @@ export default function Settings() {
     });
   };
 
-  const addBypassTrigger = () => {
-    const trimmed = newBypassTrigger.trim();
+  const addReplyKeyword = () => {
+    const trimmed = newReplyKeyword.trim();
     if (!trimmed) return;
-    if (bypassTriggers.includes(trimmed.toLowerCase())) {
-      toast({ title: "Trigger already exists", variant: "destructive" });
+    if (replyKeywords.some(k => k.toLowerCase() === trimmed.toLowerCase())) {
+      toast({ title: "Keyword already exists", variant: "destructive" });
       return;
     }
-    setBypassTriggers(prev => [...prev, trimmed.toLowerCase()]);
-    setNewBypassTrigger("");
+    setReplyKeywords(prev => [...prev, trimmed]);
+    setNewReplyKeyword("");
   };
 
-  const removeBypassTrigger = (trigger: string) => {
-    setBypassTriggers(prev => prev.filter(t => t !== trigger));
+  const removeReplyKeyword = (keyword: string) => {
+    setReplyKeywords(prev => prev.filter(k => k !== keyword));
   };
 
   const handleSavePayment = () => {
@@ -877,7 +898,7 @@ export default function Settings() {
                   Welcome Message
                 </CardTitle>
                 <CardDescription>
-                  This message is sent when a customer first contacts your chatbot
+                  This message is sent when a customer triggers it with a keyword or leaves a missed call
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -970,34 +991,37 @@ export default function Settings() {
                   </div>
                 )}
 
-                {/* Bypass Triggers */}
+                {/* Reply Keywords */}
                 <div className="space-y-2 border-t pt-4">
-                  <Label>Bypass Triggers</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Reply Keywords</Label>
+                    <span className="text-xs text-muted-foreground">Sinhala, Singlish & English</span>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    If a customer's first message contains any of these keywords, the welcome message and media will be skipped.
+                    The welcome message will be triggered when a customer sends any of these keywords or leaves a missed call. Otherwise, the bot will reply normally.
                   </p>
                   <div className="flex gap-2">
                     <Input
-                      value={newBypassTrigger}
-                      onChange={(e) => setNewBypassTrigger(e.target.value)}
-                      placeholder="e.g. reorder, urgent, support"
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addBypassTrigger())}
+                      value={newReplyKeyword}
+                      onChange={(e) => setNewReplyKeyword(e.target.value)}
+                      placeholder="e.g. hi, hello, හලෝ, ආයුබෝවන්, start"
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addReplyKeyword())}
                     />
-                    <Button type="button" variant="outline" size="sm" onClick={addBypassTrigger}>
+                    <Button type="button" variant="outline" size="sm" onClick={addReplyKeyword}>
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
-                  {bypassTriggers.length > 0 && (
+                  {replyKeywords.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {bypassTriggers.map((trigger) => (
+                      {replyKeywords.map((keyword) => (
                         <span
-                          key={trigger}
+                          key={keyword}
                           className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium"
                         >
-                          {trigger}
+                          {keyword}
                           <button
                             type="button"
-                            onClick={() => removeBypassTrigger(trigger)}
+                            onClick={() => removeReplyKeyword(keyword)}
                             className="ml-1 text-muted-foreground hover:text-destructive"
                           >
                             ×
