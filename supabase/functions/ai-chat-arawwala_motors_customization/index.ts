@@ -34,16 +34,27 @@ serve(async (req) => {
     console.log(`Processing AI chat for ${phoneNumber} (user: ${userId}): ${message}`);
 
     // Fetch products, FAQs, settings, profile, and platform limits
+    // In this store customization, all active products and FAQs in the schema belong to this business.
     const [productsRes, faqsRes, settingsRes, profileRes, platformLimitsRes] = await Promise.all([
-      supabase.schema("arawwala_motors_customization").from("products").select("*").eq("is_active", true).eq("user_id", userId),
-      supabase.schema("arawwala_motors_customization").from("faqs").select("*, products(name)").eq("is_active", true).eq("user_id", userId),
-      supabase.schema("arawwala_motors_customization").from("settings").select("key, value").eq("user_id", userId),
-      supabase.schema("arawwala_motors_customization").from("profiles").select("plan_tier, billing_cycle_start, is_paused, addon_contacts, addon_orders").eq("user_id", userId).single(),
-      supabase.schema("arawwala_motors_customization").from("platform_settings").select("value").eq("key", "plan_limits").single(),
+      supabase.schema("arawwala_motors_customization").from("products").select("*").eq("is_active", true),
+      supabase.schema("arawwala_motors_customization").from("faqs").select("*, products(name)").eq("is_active", true),
+      supabase.schema("arawwala_motors_customization").from("settings").select("key, value, user_id"),
+      supabase.schema("arawwala_motors_customization").from("profiles").select("plan_tier, billing_cycle_start, is_paused, addon_contacts, addon_orders").eq("user_id", userId).maybeSingle(),
+      supabase.schema("arawwala_motors_customization").from("platform_settings").select("value").eq("key", "plan_limits").maybeSingle(),
     ]);
 
+    let profileData = profileRes?.data;
+    if (!profileData) {
+      const { data: fallbackProfile } = await supabase
+        .schema("arawwala_motors_customization").from("profiles")
+        .select("plan_tier, billing_cycle_start, is_paused, addon_contacts, addon_orders")
+        .limit(1)
+        .maybeSingle();
+      profileData = fallbackProfile;
+    }
+
     // Check if account is paused
-    if (profileRes.data?.is_paused) {
+    if (profileData?.is_paused) {
       console.log(`Account paused for user ${userId}`);
       return new Response(
         JSON.stringify({ error: "Account paused", response: "Sorry, this business account is currently paused. Please try again later." }),
@@ -51,13 +62,13 @@ serve(async (req) => {
       );
     }
 
-    const planTier = profileRes.data?.plan_tier || "free";
-    const allLimits = platformLimitsRes.data?.value || {};
+    const planTier = profileData?.plan_tier || "free";
+    const allLimits = platformLimitsRes?.data?.value || {};
     const tierLimits = allLimits[planTier] || {};
-    const contactLimit = (tierLimits.contacts_per_month || 50) + (profileRes.data?.addon_contacts || 0);
+    const contactLimit = (tierLimits.contacts_per_month || 50) + (profileData?.addon_contacts || 0);
 
     // Use billing cycle start for monthly count
-    const billingStart = profileRes.data?.billing_cycle_start;
+    const billingStart = profileData?.billing_cycle_start;
     let monthStart: string;
     if (billingStart) {
       const start = new Date(billingStart);
@@ -112,16 +123,24 @@ serve(async (req) => {
 
 
     const settings = settingsRes.data || [];
-    const escalationSettings = settings.find(s => s.key === "escalation_settings")?.value || {};
+    const findSetting = (key: string) => {
+      if (userId) {
+        const match = settings.find((s: any) => s.key === key && s.user_id === userId);
+        if (match) return match.value;
+      }
+      return settings.find((s: any) => s.key === key)?.value;
+    };
+
+    const escalationSettings = findSetting("escalation_settings") || {};
     const escalationEnabled = escalationSettings.enabled === true;
     const escalationNotifyNumber = escalationSettings.notify_number;
 
     const products = productsRes.data || [];
     const faqs = faqsRes.data || [];
 
-    const welcomeMessage = settings.find(s => s.key === "welcome_message")?.value?.text || "Welcome! How can I help you?";
-    const paymentInfo = settings.find(s => s.key === "payment_info")?.value || {};
-    const deliverySettings = settings.find(s => s.key === "delivery_settings")?.value || {};
+    const welcomeMessage = findSetting("welcome_message")?.text || "Welcome! How can I help you?";
+    const paymentInfo = findSetting("payment_info") || {};
+    const deliverySettings = findSetting("delivery_settings") || {};
     const freeDeliveryThreshold = deliverySettings.free_delivery_threshold || 0;
     const deliveryInfo = deliverySettings.delivery_info || "";
     const deliveryTracking = deliverySettings.delivery_tracking || "";

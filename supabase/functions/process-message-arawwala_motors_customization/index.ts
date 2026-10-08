@@ -320,12 +320,21 @@ async function processMessage(
 
   // 2. Check if auto-responses are enabled
   mark("settings_start");
-  const { data: settingsData } = await supabase
+  let { data: settingsData } = await supabase
     .schema("arawwala_motors_customization").from("settings")
     .select("value")
     .eq("key", "auto_responses")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
+  if (!settingsData) {
+    const { data: anyAuto } = await supabase
+      .schema("arawwala_motors_customization").from("settings")
+      .select("value")
+      .eq("key", "auto_responses")
+      .limit(1)
+      .maybeSingle();
+    settingsData = anyAuto;
+  }
   mark("settings_end");
 
   const autoResponsesEnabled = settingsData?.value?.enabled ?? true;
@@ -352,12 +361,21 @@ async function processMessage(
   // 4. Welcome Message Trigger Check:
   // The welcome message is triggered when the user types a certain keyword or has left a missed call.
   // Else the bot should reply to the message normally.
-  const { data: welcomeSettings } = await supabase
+  let { data: welcomeSettings } = await supabase
     .schema("arawwala_motors_customization").from("settings")
     .select("value")
     .eq("key", "welcome_message")
     .eq("user_id", userId)
     .maybeSingle();
+  if (!welcomeSettings) {
+    const { data: anyWelcome } = await supabase
+      .schema("arawwala_motors_customization").from("settings")
+      .select("value")
+      .eq("key", "welcome_message")
+      .limit(1)
+      .maybeSingle();
+    welcomeSettings = anyWelcome;
+  }
 
   const wVal = welcomeSettings?.value || {};
   const replyKeywords: string[] = Array.isArray(wVal.reply_keywords)
