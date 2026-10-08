@@ -120,10 +120,14 @@ export default function Products() {
     setSaving(true);
 
     try {
+      const basePrice = parseFloat(price);
+      const fallbackPrice = variations[0]?.options[0]?.price ?? 0;
+      const finalPrice = !isNaN(basePrice) && price !== "" ? basePrice : (hasVariationImages ? fallbackPrice : 0);
+
       const productData = {
         name,
         description: description || null,
-        price: parseFloat(price),
+        price: finalPrice,
         delivery_price: productType === "physical" ? parseFloat(deliveryPrice || "0") : 0,
         product_type: productType,
         variations: variations as unknown as import("@/integrations/supabase/types").Json,
@@ -223,7 +227,7 @@ export default function Products() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={hasVariationImages ? "space-y-2" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
                   <div className="space-y-2">
                     <Label htmlFor="name">Product Name *</Label>
                     <Input
@@ -234,18 +238,20 @@ export default function Products() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Price *</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      value={price}
-                      onChange={(e) => setPrice(e.target.value)}
-                      placeholder="29.99"
-                      required
-                    />
-                  </div>
+                  {!hasVariationImages && (
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Price *</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="0.01"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        placeholder="29.99"
+                        required
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {productType === "physical" && (
