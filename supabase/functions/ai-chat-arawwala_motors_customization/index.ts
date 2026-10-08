@@ -239,6 +239,11 @@ IMPORTANT GUIDELINES:
   - DO NOT ask: "What vehicle model do you have?", "Which car is this for?", "Could you provide your vehicle model?", "What part do you need?", or anything similar.
   - Never wait for or demand vehicle information before presenting products.
   - Instead, IMMEDIATELY show the matching product images and state the prices directly using the PRODUCT INQUIRY & VARIATION DISPLAY LOGIC below!
+- ABSOLUTE RULE - NO CASH ON DELIVERY (COD):
+  - We DO NOT support Cash on Delivery (COD). Cash on delivery is NOT available under any circumstances.
+  - If a customer asks if Cash on Delivery (COD) is available, or asks to pay upon delivery / receiving the package (e.g. "Cash on delivery thiyenawada?", "COD puluwanda?", "COD available da?", "Cash on delivery karanna puluwanda?", "බඩු ආවම සල්ලි දෙන්න පුලුවන්ද?"):
+    Politely inform them in their language that Cash on Delivery is NOT available, and that full payment must be made in advance via Bank Transfer before the order is dispatched / delivered.
+  - NEVER offer or suggest Cash on Delivery as an option. The ONLY accepted payment method for all products is Bank Transfer.
 - KEEP IT SHORT: WhatsApp messages must be concise and scannable. Aim for 2-4 short lines max per response. Never send walls of text.
 - Do NOT repeat information the customer already knows or that was already sent.
 - Get straight to the point. No lengthy greetings or unnecessary filler sentences.
@@ -257,9 +262,9 @@ IMPORTANT GUIDELINES:
     Account: wallet@email.com
     Name: Jane Doe
   - For order summaries, use emojis to mark each section (📦 Items, 💰 Total, 🚚 Delivery, 💳 Payment)
-- If a customer wants to order, guide them through collecting: name, phone, product selection with variations, quantity, and payment method.
+- If a customer wants to order, guide them through collecting: name, phone, product selection with variations, quantity, shipping address, and provide Bank Transfer payment details.
 - DIGITAL vs PHYSICAL PRODUCTS:
-   - For PHYSICAL products: Also collect the customer's district/city and full shipping address. Offer both Cash on Delivery (COD) and Bank Transfer as payment options. If a delivery fee is listed for the product, ADD it to the total and show it as a separate line item in the order summary.
+   - For PHYSICAL products: Collect the customer's district/city and full shipping address. Payment is strictly via Bank Transfer in advance. Do NOT offer Cash on Delivery (COD is not supported). If a delivery fee is listed for the product, ADD it to the total and show it as a separate line item in the order summary.
 ${freeDeliveryThreshold > 0 ? `   - FREE DELIVERY THRESHOLD: If the order subtotal (before delivery fee) for physical products is LKR ${freeDeliveryThreshold} or more, waive the delivery fee entirely and inform the customer they qualify for free delivery. If below this threshold, apply the normal delivery fee.` : ""}
   - For DIGITAL products: Do NOT ask for a shipping address. Do NOT offer Cash on Delivery. The ONLY payment method for digital products is Bank Transfer. No delivery fee applies. You MUST collect the customer's email address for digital product delivery.
 - Sub-variants marked as REQUIRED must be selected by the customer before confirming an order. Always ask for required sub-variants if the customer hasn't specified them.
@@ -368,7 +373,7 @@ CUSTOMER INFO EXTRACTION:
 
 CRITICAL ORDER INSTRUCTION:
 When you have collected ALL required order details and the customer confirms, you MUST include a JSON block in your response wrapped in <ORDER_JSON> tags like this:
-- For PHYSICAL products: <ORDER_JSON>{"customer_name":"...","customer_phone":"...","district":"...","customer_address":"...","order_items":[{"name":"...","price":...,"quantity":...,"product_type":"physical"}],"payment_method":"cod or bank_transfer","total_amount":...}</ORDER_JSON>
+- For PHYSICAL products: <ORDER_JSON>{"customer_name":"...","customer_phone":"...","district":"...","customer_address":"...","order_items":[{"name":"...","price":...,"quantity":...,"product_type":"physical"}],"payment_method":"bank_transfer","total_amount":...}</ORDER_JSON>
 - For DIGITAL products: <ORDER_JSON>{"customer_name":"...","customer_phone":"...","customer_email":"...","customer_address":null,"order_items":[{"name":"...","price":...,"quantity":...,"product_type":"digital"}],"payment_method":"bank_transfer","total_amount":...}</ORDER_JSON>
 Include this JSON block at the END of your confirmation message. The customer won't see the JSON tags.
 
@@ -556,7 +561,7 @@ CRITICAL SECURITY RULE:
                 district: orderData.district || null,
                 customer_address: orderData.customer_address || null,
                 order_items: orderData.order_items || [],
-                payment_method: orderData.payment_method || "cod",
+                payment_method: orderData.payment_method || "bank_transfer",
                 total_amount: orderData.total_amount || 0,
                 special_instructions: orderData.customer_email ? `Email: ${orderData.customer_email}` : null,
                 status: "pending",
