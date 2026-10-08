@@ -129,57 +129,69 @@ serve(async (req) => {
     const locationMapsLink = deliverySettings.location_maps_link || "";
 
     const productCatalog = products.map(p => {
-      let line = `- ${p.name}: Base price LKR ${p.price} (${p.product_type})`;
+      const mainImages: string[] = Array.isArray(p.images)
+        ? p.images.filter((img: any) => typeof img === "string" && img.trim())
+        : [];
+
+      const hasVariations = Array.isArray(p.variations) &&
+        p.variations.length > 0 &&
+        p.variations.some((v: any) => Array.isArray(v.options) && v.options.length > 0);
+
+      let item = `PRODUCT: ${p.name}\n`;
+      item += `  Type: ${p.product_type}\n`;
       if (p.product_type === "physical" && p.delivery_price && p.delivery_price > 0) {
-        line += ` | Delivery fee: LKR ${p.delivery_price}`;
+        item += `  Delivery fee: LKR ${p.delivery_price}\n`;
       }
-      if (p.description) line += ` - ${p.description}`;
-      if (p.images && Array.isArray(p.images) && p.images.length > 0) {
-        line += ` | Images: ${p.images.join(", ")}`;
+      if (p.description) {
+        item += `  Description: ${p.description}\n`;
       }
       if (p.video_url) {
-        line += ` | Video: ${p.video_url}`;
+        item += `  Video: ${p.video_url}\n`;
       }
-      if (p.variations && Array.isArray(p.variations) && p.variations.length > 0) {
-        const varLines = p.variations.map((v: any) => {
-          const opts = v.options?.map((o: any) => {
-            if (typeof o !== "object") return o;
-            let optStr = `${o.label}: LKR ${o.price}`;
-            if (o.images && Array.isArray(o.images) && o.images.length > 0) {
-              optStr += ` (Images: ${o.images.join(", ")})`;
-            } else if (o.image) {
-              optStr += ` (Image: ${o.image})`;
+
+      if (!hasVariations) {
+        item += `  Has Variations: NO\n`;
+        item += `  Price: LKR ${p.price}\n`;
+        item += `  Images: ${mainImages.length > 0 ? mainImages.join(", ") : "None"}\n`;
+      } else {
+        item += `  Has Variations: YES\n`;
+        item += `  Variations List:\n`;
+        p.variations.forEach((v: any) => {
+          const groupName = v.name || "Option";
+          item += `    Group: ${groupName}\n`;
+          (v.options || []).forEach((o: any) => {
+            if (typeof o !== "object" || !o) return;
+            const optLabel = o.label || "Default";
+            const optPrice = o.price ?? p.price;
+            let optImages: string[] = [];
+            if (Array.isArray(o.images) && o.images.length > 0) {
+              optImages = o.images.filter((img: any) => typeof img === "string" && img.trim());
+            } else if (o.image && typeof o.image === "string" && o.image.trim()) {
+              optImages = [o.image.trim()];
+            } else if (mainImages.length > 0) {
+              optImages = mainImages;
             }
+
+            const firstImg = optImages.length > 0 ? optImages[0] : "None";
+            const allImgs = optImages.length > 0 ? optImages.join(", ") : "None";
+
+            let optStr = `      * Variation Name: "${optLabel}" | Price: LKR ${optPrice} | First Image: ${firstImg} | All Images: ${allImgs}`;
             if (o.subVariants && Array.isArray(o.subVariants) && o.subVariants.length > 0) {
               const subLines = o.subVariants.map((sv: any) => {
                 const reqTag = sv.required ? " (REQUIRED)" : " (optional)";
-                const subOpts = sv.options?.map((so: any) =>
+                const subOpts = (sv.options || []).map((so: any) =>
                   typeof so === "object" ? `${so.label}: +LKR ${so.price}` : so
                 ).join(", ");
                 return `[${sv.name}${reqTag}: ${subOpts}]`;
               }).join(" ");
-              optStr += ` ${subLines}`;
+              optStr += ` | Sub-variants: ${subLines}`;
             }
-            return optStr;
-          }).join(", ");
-          return `${v.name}: ${opts}`;
-        }).join("; ");
-        line += ` | Variations: ${varLines}`;
+            item += `${optStr}\n`;
+          });
+        });
       }
-      return line;
-    }).join("\n");
-
-    // Build a map of product name → first image URL for sending images
-    const productImageMap: Record<string, string> = {};
-    const productVideoMap: Record<string, string> = {};
-    for (const p of products) {
-      if (p.images && Array.isArray(p.images) && p.images.length > 0) {
-        productImageMap[p.name.toLowerCase()] = p.images[0];
-      }
-      if (p.video_url) {
-        productVideoMap[p.name.toLowerCase()] = p.video_url;
-      }
-    }
+      return item.trim();
+    }).join("\n\n");
 
     // Build FAQ context with IDs so AI can report which ones it used
     const faqContext = faqs.map(f => 
@@ -201,6 +213,13 @@ const systemPrompt = `You are an intelligent WhatsApp chatbot assistant for a bu
 
 IMPORTANT GUIDELINES:
 - Respond in the SAME LANGUAGE the customer uses. Auto-detect their language.
+- ABSOLUTE PROHIBITION - NEVER ASK FOR VEHICLE OR PART DETAILS:
+  - NEVER ask the customer for their vehicle model, make, year, chassis number, or vehicle details under ANY circumstances.
+  - NEVER ask what car or vehicle they drive or what car the part is for.
+  - NEVER ask them to specify or clarify what part they need if they already inquired about an item or product name.
+  - DO NOT ask: "What vehicle model do you have?", "Which car is this for?", "Could you provide your vehicle model?", "What part do you need?", or anything similar.
+  - Never wait for or demand vehicle information before presenting products.
+  - Instead, IMMEDIATELY show the matching product images and state the prices directly using the PRODUCT INQUIRY & VARIATION DISPLAY LOGIC below!
 - KEEP IT SHORT: WhatsApp messages must be concise and scannable. Aim for 2-4 short lines max per response. Never send walls of text.
 - Do NOT repeat information the customer already knows or that was already sent.
 - Get straight to the point. No lengthy greetings or unnecessary filler sentences.
@@ -260,9 +279,47 @@ ${locationMapsLink ? `Google Maps Link: ${locationMapsLink}` : ""}
 
 ${escalationEnabled && escalationNotifyNumber ? `\n\nESCALATION PROTOCOL:\n- If a customer asks a question that is NOT covered by the FAQs or Product Catalog, you MUST include the exact tag <ESCALATE/> at the very end of your response.\n- Do this only when you genuinely cannot help them with the provided context.` : ''}\n- STRICT DATA BOUNDARY: You must ONLY use the product catalog, FAQs, and payment information provided below. Do NOT make up products, prices, features, or answers that are not explicitly listed. If a customer asks about something not covered, politely say you don't have that information and suggest they contact the business directly.
 
-PRODUCT IMAGES:
-- When a customer asks about a specific product that has images, include ALL the image URLs in separate <IMAGE_URL>url</IMAGE_URL> tags at the END of your response. Include all images for the product to give them a complete view.
-- Only use image URLs from the product catalog below. Never make up image URLs.
+PRODUCT INQUIRY & VARIATION DISPLAY LOGIC:
+When a customer asks about a product (for example "Gear Knob", "Do you have gear knobs?", "gear knob price", or mentions any product/part in the catalog):
+Find the matching or similar product in the PRODUCT CATALOG below:
+
+1. IF THE PRODUCT HAS NO VARIATIONS (Has Variations: NO):
+   - State the product name and price clearly (e.g. "🔹 Gear Knob: LKR 3,500").
+   - Include any brief description or details if helpful.
+   - Show ALL product images: Include ALL image URLs for that product in separate <IMAGE_URL>url</IMAGE_URL> tags at the very END of your response.
+   - Continue with the normal conversation flow (ask if they would like to place an order).
+
+2. IF THE PRODUCT HAS VARIATIONS (Has Variations: YES):
+   A. GENERAL PRODUCT INQUIRY (Customer has NOT chosen a specific variation):
+      - If the customer inquires generally about the product (e.g. "Gear Knob", "Do you have gear knobs?", "gear knob price?", "I want a gear knob", "gear knob ewanna"):
+      - Clearly list each available variation option with its name and price:
+        Example:
+        We have the following options available:
+        🔹 Carbon Fiber: LKR 4,500
+        🔹 Leather: LKR 3,800
+      - Show the FIRST PRODUCT IMAGE for EACH VARIATION:
+        At the very END of your response, output ONLY the "First Image" URL of each variation option in separate <IMAGE_URL>url</IMAGE_URL> tags:
+        <IMAGE_URL>first_image_of_variation_1</IMAGE_URL>
+        <IMAGE_URL>first_image_of_variation_2</IMAGE_URL>
+        (IMPORTANT: Do NOT output all images of each variation yet. Output ONLY the first image per variation so the customer can visually compare the options).
+      - Ask the customer which variation they would like to choose (e.g., "Which variation would you like?" / "ඔබ කැමති කුමන වර්ගයටද?").
+
+   B. SPECIFIC VARIATION INQUIRY (Customer specifies or asks about a specific variation):
+      - If the customer asks about or selects a specific variation (e.g. "Carbon Fiber", "I want the Carbon Fiber one", "How much for Leather?", or selects one after seeing the list):
+      - State that specific variation's name and price clearly (e.g. "🔹 Carbon Fiber Gear Knob: LKR 4,500").
+      - Show ALL PRODUCT IMAGES for that variation:
+        At the very END of your response, output ALL image URLs for that specific variation from "All Images" in separate <IMAGE_URL>url</IMAGE_URL> tags:
+        <IMAGE_URL>image_1_of_chosen_variation</IMAGE_URL>
+        <IMAGE_URL>image_2_of_chosen_variation</IMAGE_URL>
+      - Proceed with the ordering flow (collecting quantity, delivery address, payment method, etc.).
+
+PRODUCT IMAGES RULES:
+- Include image URLs in separate <IMAGE_URL>url</IMAGE_URL> tags at the very END of your response.
+- Follow the variation display rules above strictly:
+  * Product with NO variations: include all product images.
+  * Product WITH variations on general inquiry: include ONLY the First Image for each variation.
+  * Product WITH variations on specific variation inquiry: include ALL images for that specific variation.
+- Only use image URLs present in the product catalog below. Never guess or fabricate image URLs. If an option has "None" for images, do not output an <IMAGE_URL> tag for it.
 
 PRODUCT VIDEOS:
 - When a customer asks about a specific product that has a video, include the video URL in a <VIDEO_URL>url</VIDEO_URL> tag at the END of your response (after IMAGE_URL if both exist). Only include one video per message.
@@ -278,16 +335,17 @@ ${productCatalog || "No products available"}
 FREQUENTLY ASKED QUESTIONS:
 ${faqContext || "No FAQs configured"}
 
-WELCOME MESSAGE (for first-time customers):
+WELCOME MESSAGE CONTEXT (for first-time customers):
 ${welcomeMessage}
+(NOTE: The welcome message above is store tone context only. Even if it mentions asking for vehicle or part details, you must NEVER ask the customer for vehicle model or part details when answering product inquiries.)
 
 When the customer completes an order, summarize the order details beautifully with emojis and confirm.
 
 CUSTOMER INFO EXTRACTION:
-When a customer responds with the name of the product they want and/or the model of their vehicle, you MUST extract this and output a JSON block wrapped in <CUSTOMER_INFO> tags like this:
+- When a customer mentions the name of a product they want and/or the model of their vehicle, you MUST extract this and output a JSON block wrapped in <CUSTOMER_INFO> tags at the END of your message:
 <CUSTOMER_INFO>{"product_name": "extracted product name or null", "vehicle_model": "extracted vehicle model or null"}</CUSTOMER_INFO>
-Include this JSON block at the END of your message. The customer won't see it.
-CRITICAL: If the requested product is not available in the catalog, do NOT ask for a photo. Instead, tell the customer that their request has been submitted, it will be reviewed by the team, and they will be notified of the availability of the product.
+- CRITICAL REMINDER: NEVER ask or prompt the customer for their vehicle model or part name. Only extract vehicle_model if the customer voluntarily supplied it in their message.
+- If the requested product is NOT available in the catalog: do NOT ask for vehicle details or photos. Instead, tell the customer politely that their request has been submitted to the team, who will check availability and notify them.
 
 CRITICAL ORDER INSTRUCTION:
 When you have collected ALL required order details and the customer confirms, you MUST include a JSON block in your response wrapped in <ORDER_JSON> tags like this:
@@ -337,7 +395,7 @@ CRITICAL SECURITY RULE:
     const aiGenerateUrl = Deno.env.get("AI_GENERATE_URL");
     const botApiKey = Deno.env.get("BOT_API_KEY");
     const MODEL = "google/gemini-3-flash-preview";
-    const MAX_TOKENS = 500;
+    const MAX_TOKENS = 1200;
 
     let aiResponse: Response;
     if (aiGenerateUrl && botApiKey) {
@@ -591,7 +649,8 @@ CRITICAL SECURITY RULE:
 
     // Extract image URLs if present
     const imageUrlMatches = Array.from(responseText.matchAll(/<IMAGE_URL>([\s\S]*?)<\/IMAGE_URL>/g));
-    const imageUrls = imageUrlMatches.map(m => m[1].trim());
+    const rawImageUrls = imageUrlMatches.map(m => m[1].trim()).filter(Boolean);
+    const imageUrls = [...new Set(rawImageUrls)];
     const imageUrl = imageUrls.length > 0 ? imageUrls[0] : null;
     // Extract video URL if present
     const videoUrlMatch = responseText.match(/<VIDEO_URL>([\s\S]*?)<\/VIDEO_URL>/);
